@@ -1,5 +1,5 @@
 import type { DetectionAdapter } from '../../types'
-import { buildDetection, getMeta, queryText } from '../helpers'
+import { buildDetection, getFirstHeadingText, getMeta, queryText } from '../helpers'
 
 export const netflixAdapter: DetectionAdapter = {
   id: 'netflix',
@@ -7,6 +7,7 @@ export const netflixAdapter: DetectionAdapter = {
   matches: (url) => url.hostname.includes('netflix.com'),
   detect(context) {
     const rawTitle =
+      getFirstHeadingText(context.document) ??
       queryText(context.document, [
         '[data-uia="video-title"]',
         '[data-videoid] h4',

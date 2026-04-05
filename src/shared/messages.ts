@@ -12,7 +12,9 @@ import type {
 
 export type WatchLogMessage =
   | { type: 'watchlog/report-detection'; payload: DetectionResult }
-  | { type: 'watchlog/get-active-detection' }
+  | { type: 'watchlog/get-active-detection'; payload?: { tabId?: number } }
+  | { type: 'watchlog/reanalyze-active-detection'; payload?: { tabId?: number } }
+  | { type: 'watchlog/request-live-detection' }
   | { type: 'watchlog/save-detection'; payload: SaveDetectionInput }
   | { type: 'watchlog/add-from-explorer'; payload: { metadataId: string; listId: string } }
   | { type: 'watchlog/get-library' }
@@ -29,8 +31,16 @@ export type WatchLogMessage =
       }
     }
 
+export interface DetectionDebugInfo {
+  tabId: number | null
+  tabUrl: string | null
+  source: 'cache' | 'content-script' | 'scripting' | 'popup-scripting' | 'none'
+  reason?: string
+}
+
 export interface ActiveDetectionResponse {
   detection: DetectionResult | null
+  debug: DetectionDebugInfo
 }
 
 export interface SaveDetectionResponse {

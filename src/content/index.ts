@@ -1,4 +1,5 @@
 import { detectCurrentDocument } from '../shared/detection/registry'
+import type { WatchLogMessage } from '../shared/messages'
 
 let lastSignature = ''
 let lastUrl = window.location.href
@@ -34,6 +35,18 @@ async function reportDetection(): Promise<void> {
     payload: detection,
   })
 }
+
+chrome.runtime.onMessage.addListener((message: WatchLogMessage, _sender, sendResponse) => {
+  if (message.type !== 'watchlog/request-live-detection') {
+    return false
+  }
+
+  sendResponse({
+    detection: detectCurrentDocument(document, window.location.href),
+  })
+
+  return false
+})
 
 const observer = new MutationObserver(() => {
   scheduleDetection()

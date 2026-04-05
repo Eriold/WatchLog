@@ -8,9 +8,19 @@ export default defineManifest({
   description:
     'Track what you are watching or reading across streaming sites and the web without central tracking.',
   version,
+  icons: {
+    16: 'icons/favicon-16x16.png',
+    32: 'icons/favicon-32x32.png',
+    48: 'icons/favicon-32x32.png',
+    128: 'icons/android-chrome-192x192.png',
+  },
   action: {
     default_title: 'WatchLog',
     default_popup: 'popup.html',
+    default_icon: {
+      16: 'icons/favicon-16x16.png',
+      32: 'icons/favicon-32x32.png',
+    },
   },
   background: {
     service_worker: 'src/background/index.ts',
@@ -20,7 +30,7 @@ export default defineManifest({
   side_panel: {
     default_path: 'sidepanel.html',
   },
-  permissions: ['storage', 'tabs', 'activeTab', 'sidePanel'],
+  permissions: ['storage', 'tabs', 'activeTab', 'sidePanel', 'scripting'],
   host_permissions: ['<all_urls>'],
   content_scripts: [
     {

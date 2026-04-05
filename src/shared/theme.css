@@ -163,3 +163,17 @@ select {
   font-size: 1.05rem;
   letter-spacing: 0.02em;
 }
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+}

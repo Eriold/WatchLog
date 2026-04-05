@@ -1,7 +1,10 @@
 import type { DetectionContext, DetectionResult, MediaType } from '../types'
 import { compactText, normalizeTitle } from '../utils/normalize'
 
-export function createDetectionContext(document: Document, href = window.location.href): DetectionContext {
+export function createDetectionContext(
+  document: Document,
+  href = window.location.href,
+): DetectionContext {
   return {
     url: new URL(href),
     title: document.title,
@@ -18,9 +21,30 @@ export function getMeta(document: Document, property: string): string | null {
   return meta?.getAttribute('content')?.trim() ?? null
 }
 
+export function queryAttribute(
+  document: Document,
+  selector: string,
+  attribute: string,
+): string | null {
+  return document.querySelector(selector)?.getAttribute(attribute)?.trim() ?? null
+}
+
 export function queryText(document: Document, selectors: string[]): string | null {
   for (const selector of selectors) {
     const text = document.querySelector(selector)?.textContent?.trim()
+    if (text) {
+      return compactText(text)
+    }
+  }
+
+  return null
+}
+
+export function getFirstHeadingText(document: Document, selector = 'h1'): string | null {
+  const headings = Array.from(document.querySelectorAll(selector))
+
+  for (const heading of headings) {
+    const text = heading.textContent?.trim()
     if (text) {
       return compactText(text)
     }
@@ -33,9 +57,37 @@ export function cleanTitle(title: string, siteName: string): string {
   return compactText(
     title
       .replace(new RegExp(`\\s*[|\\-]\\s*${siteName}$`, 'i'), '')
-      .replace(/\s*[|·•]\s*(Netflix|Prime Video|MAX|HBO Max|YouTube)$/i, '')
+      .replace(/\s*[|\u00b7\u2022]\s*(Netflix|Prime Video|MAX|HBO Max|YouTube)$/i, '')
       .trim(),
   )
+}
+
+export function isPlaceholderTitle(title: string, siteName: string): boolean {
+  const normalizedTitle = normalizeTitle(title)
+  const normalizedSite = normalizeTitle(siteName)
+
+  if (!normalizedTitle) {
+    return true
+  }
+
+  if (normalizedTitle === normalizedSite) {
+    return true
+  }
+
+  const placeholderTitles = new Set([
+    'youtube',
+    'watch on youtube',
+    'netflix',
+    'max',
+    'hbo max',
+    'prime video',
+    'amazon prime video',
+    'watch',
+    'video',
+    'streaming',
+  ])
+
+  return placeholderTitles.has(normalizedTitle)
 }
 
 export function getFavicon(url: URL): string {
@@ -64,6 +116,7 @@ export function parseProgress(text: string): {
       const season = Number(match[1])
       const episode = Number(match[2])
       const episodeTotal = match[3] ? Number(match[3]) : undefined
+
       return {
         season,
         episode,
@@ -84,6 +137,7 @@ export function parseProgress(text: string): {
     if (match) {
       const chapter = Number(match[1])
       const chapterTotal = match[2] ? Number(match[2]) : undefined
+
       return {
         chapter,
         chapterTotal,
@@ -103,6 +157,7 @@ export function inferMediaType(
   fallbackTitle: string,
 ): MediaType {
   const hostname = url.hostname
+
   if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
     return 'video'
   }
@@ -125,7 +180,7 @@ export function buildDetection(
   confidence: number,
 ): DetectionResult | null {
   const title = cleanTitle(rawTitle, siteName)
-  if (!title) {
+  if (!title || isPlaceholderTitle(title, siteName)) {
     return null
   }
 

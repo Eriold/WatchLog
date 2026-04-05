@@ -171,7 +171,10 @@ export function SidePanelApp() {
     <div className="app-shell sidepanel-shell">
       <div className="sidepanel-layout">
         <aside className="panel sidebar">
-          <p className="tiny">WatchLog</p>
+          <div className="brand-lockup">
+            <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+            <p className="tiny">WatchLog</p>
+          </div>
           <h1 className="section-title">Your queues</h1>
           <p className="muted">
             Track where you left off and re-open the latest source with one click.
@@ -220,7 +223,10 @@ export function SidePanelApp() {
         <main className="panel content">
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <p className="tiny">Workspace</p>
+              <div className="brand-lockup">
+                <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+                <p className="tiny">Workspace</p>
+              </div>
               <h2 className="section-title">
                 {selectedListId === EXPLORER_TAB_ID
                   ? 'Explorer mock catalog'

@@ -16,7 +16,11 @@ export async function storageSet<T>(
 }
 
 export async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+  let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+  if (tabs.length === 0) {
+    tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+  }
+
   return tabs[0] ?? null
 }
 

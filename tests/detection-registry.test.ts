@@ -54,6 +54,113 @@ describe('detectCurrentDocument', () => {
     expect(result?.mediaType).toBe('video')
   })
 
+  it('prioritizes the first h1 over later title candidates', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <title>Fallback Window Title - YouTube</title>
+        </head>
+        <body>
+          <main>
+            <h1>Correct Video Title</h1>
+            <yt-formatted-string class="style-scope ytd-watch-metadata">
+              Wrong Candidate Title
+            </yt-formatted-string>
+            <h1>Second Heading</h1>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.youtube.com/watch?v=phase1',
+    )
+
+    expect(result?.title).toBe('Correct Video Title')
+    expect(result?.sourceSite).toBe('YouTube')
+  })
+
+  it('falls back to og:title when YouTube has no usable h1 yet', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>YouTube</title>
+          <meta property="og:title" content="ELIMINAMOS cámara de FOTOMULTA y ¿sabías que esto es lo que debes hacer?" />
+        </head>
+        <body>
+          <main>
+            <div>Loading player...</div>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.youtube.com/watch?app=desktop&v=Tj4s78WcLxw',
+    )
+
+    expect(result?.title).toBe(
+      'ELIMINAMOS cámara de FOTOMULTA y ¿sabías que esto es lo que debes hacer?',
+    )
+    expect(result?.sourceSite).toBe('YouTube')
+    expect(result?.mediaType).toBe('video')
+  })
+
+  it('uses YouTube meta name title when the h1 is not mounted yet', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>YouTube</title>
+          <meta name="title" content="ELIMINAMOS cámara de FOTOMULTA y ¿sabías que esto es lo que debes hacer?" />
+        </head>
+        <body>
+          <main>
+            <div>Loading player...</div>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.youtube.com/watch?app=desktop&v=Tj4s78WcLxw',
+    )
+
+    expect(result?.title).toBe(
+      'ELIMINAMOS cámara de FOTOMULTA y ¿sabías que esto es lo que debes hacer?',
+    )
+    expect(result?.sourceSite).toBe('YouTube')
+    expect(result?.mediaType).toBe('video')
+  })
+
+  it('rejects placeholder YouTube titles while waiting for real metadata', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>YouTube</title>
+        </head>
+        <body>
+          <main>
+            <div>Loading player...</div>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.youtube.com/watch?app=desktop&v=Tj4s78WcLxw',
+    )
+
+    expect(result).toBeNull()
+  })
+
   it('falls back to the generic adapter for chapter-based pages', () => {
     const result = detectCurrentDocument(
       parseFixture(genericHtml),

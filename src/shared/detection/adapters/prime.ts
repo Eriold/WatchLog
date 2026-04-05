@@ -1,5 +1,5 @@
 import type { DetectionAdapter } from '../../types'
-import { buildDetection, getMeta, queryText } from '../helpers'
+import { buildDetection, getFirstHeadingText, getMeta, queryText } from '../helpers'
 
 export const primeAdapter: DetectionAdapter = {
   id: 'prime',
@@ -7,6 +7,7 @@ export const primeAdapter: DetectionAdapter = {
   matches: (url) => url.hostname.includes('primevideo.com') || url.hostname.includes('amazon.com'),
   detect(context) {
     const rawTitle =
+      getFirstHeadingText(context.document) ??
       queryText(context.document, [
         '[data-automation-id="title"]',
         '[data-testid="content-title"]',

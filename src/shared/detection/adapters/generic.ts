@@ -1,5 +1,5 @@
 import type { DetectionAdapter } from '../../types'
-import { buildDetection, getMeta, queryText } from '../helpers'
+import { buildDetection, getFirstHeadingText, getMeta, queryText } from '../helpers'
 
 export const genericAdapter: DetectionAdapter = {
   id: 'generic',
@@ -7,6 +7,7 @@ export const genericAdapter: DetectionAdapter = {
   matches: () => true,
   detect(context) {
     const rawTitle =
+      getFirstHeadingText(context.document) ??
       getMeta(context.document, 'og:title') ??
       queryText(context.document, ['main h1', 'article h1', 'h1']) ??
       context.title

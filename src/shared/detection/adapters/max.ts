@@ -1,5 +1,5 @@
 import type { DetectionAdapter } from '../../types'
-import { buildDetection, getMeta, queryText } from '../helpers'
+import { buildDetection, getFirstHeadingText, getMeta, queryText } from '../helpers'
 
 export const maxAdapter: DetectionAdapter = {
   id: 'max',
@@ -7,6 +7,7 @@ export const maxAdapter: DetectionAdapter = {
   matches: (url) => url.hostname.includes('max.com') || url.hostname.includes('hbomax.com'),
   detect(context) {
     const rawTitle =
+      getFirstHeadingText(context.document) ??
       queryText(context.document, [
         '[data-testid="hero-title"]',
         '[data-testid="content-title"]',

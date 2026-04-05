@@ -57,7 +57,10 @@ export function OptionsApp() {
   return (
     <div className="app-shell options-shell">
       <div className="panel options-panel">
-        <p className="tiny">WatchLog settings</p>
+        <div className="brand-lockup">
+          <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+          <p className="tiny">WatchLog settings</p>
+        </div>
         <h1 className="section-title">Local storage and project scaffolding</h1>
         <p className="muted">{message}</p>
 

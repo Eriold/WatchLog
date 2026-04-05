@@ -44,6 +44,22 @@
   border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 
+.debug-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.42);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 0.8rem;
+}
+
+.debug-url {
+  word-break: break-word;
+}
+
 .recent-item {
   display: flex;
   justify-content: space-between;

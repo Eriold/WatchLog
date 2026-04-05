@@ -17,9 +17,17 @@ import type {
 } from './types'
 import { sendRuntimeMessage } from './storage/browser'
 
-export async function getActiveDetection() {
+export async function getActiveDetection(tabId?: number) {
   return sendRuntimeMessage<ActiveDetectionResponse>({
     type: 'watchlog/get-active-detection',
+    payload: { tabId },
+  } satisfies WatchLogMessage)
+}
+
+export async function reanalyzeActiveDetection(tabId?: number) {
+  return sendRuntimeMessage<ActiveDetectionResponse>({
+    type: 'watchlog/reanalyze-active-detection',
+    payload: { tabId },
   } satisfies WatchLogMessage)
 }
 
