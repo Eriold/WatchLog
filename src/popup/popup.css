@@ -1,0 +1,52 @@
+.popup-shell {
+  width: 380px;
+  min-height: 580px;
+}
+
+.popup-card {
+  padding: 18px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.popup-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.popup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.popup-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.popup-recent {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.recent-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}

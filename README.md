@@ -1,0 +1,36 @@
+# WatchLog
+
+WatchLog is a Manifest V3 browser extension for tracking what the user is watching or reading across streaming services and the web, without central tracking.
+
+## Stack
+- React + Vite + TypeScript
+- PNPM
+- Chrome Extension Manifest V3
+- Local-first persistence on `chrome.storage.local`
+
+## Surfaces
+- `popup.html`: quick capture and save flow
+- `sidepanel.html`: main library workspace
+- `options.html`: import/export and roadmap settings
+- `src/background/index.ts`: message router and repository host
+- `src/content/index.ts`: in-page detection runner
+
+## Commands
+```bash
+pnpm install
+pnpm build
+pnpm test
+pnpm dev
+```
+
+## Load the extension
+1. Run `pnpm build`.
+2. Open the Chromium extension manager.
+3. Enable developer mode.
+4. Load the `dist/` folder as an unpacked extension.
+
+## Project notes
+- Explorer currently runs on mock metadata behind a provider abstraction.
+- Google Drive sync is intentionally deferred, but a provider stub already exists.
+- `/prototype_ui` is reserved for the future visual source of truth.
+- `/_agent` contains project memory and implementation notes.
