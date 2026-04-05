@@ -171,4 +171,33 @@ describe('detectCurrentDocument', () => {
     expect(result?.chapter).toBe(1080)
     expect(result?.progressLabel).toContain('Cap 1080')
   })
+
+  it('extracts the series title when the h1 only contains the episode number', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>One Piece Episodio 1156 Sub Español Online en HD - AnimeAV1</title>
+        </head>
+        <body>
+          <main>
+            <div>Estás viendo</div>
+            <h1>Episodio 1156</h1>
+            <a href="/media/one-piece">One Piece</a>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://animeav1.com/media/one-piece/1156',
+    )
+
+    expect(result?.sourceSite).toBe('animeav1.com')
+    expect(result?.title).toBe('One Piece')
+    expect(result?.episode).toBe(1156)
+    expect(result?.progressLabel).toBe('Ep 1156')
+    expect(result?.mediaType).toBe('series')
+  })
 })

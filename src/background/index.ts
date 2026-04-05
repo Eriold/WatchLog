@@ -18,6 +18,7 @@ import {
   inferMediaType,
   isPlaceholderTitle,
   parseProgress,
+  resolveDetectedTitle,
 } from '../shared/detection/helpers'
 import { LocalStorageProvider } from '../shared/storage/local-storage-provider'
 import { storageGet, storageSet, getActiveTab } from '../shared/storage/browser'
@@ -106,14 +107,19 @@ function inferSourceSite(url: URL): string {
 function buildDetectionFromSnapshot(snapshot: InjectedPageSnapshot): DetectionResult | null {
   const url = new URL(snapshot.href)
   const sourceSite = inferSourceSite(url)
-  const rawTitle =
-    snapshot.firstH1 ??
-    snapshot.playerResponseTitle ??
-    snapshot.youtubeHeading ??
-    snapshot.ogTitle ??
-    snapshot.metaTitle ??
-    snapshot.itempropName ??
-    snapshot.pageTitle
+  const rawTitle = resolveDetectedTitle(sourceSite, [
+    snapshot.firstH1,
+    snapshot.playerResponseTitle,
+    snapshot.youtubeHeading,
+    snapshot.ogTitle,
+    snapshot.metaTitle,
+    snapshot.itempropName,
+    snapshot.pageTitle,
+  ])
+
+  if (!rawTitle) {
+    return null
+  }
 
   const title = cleanTitle(rawTitle, sourceSite)
   if (!title || isPlaceholderTitle(title, sourceSite)) {

@@ -62,6 +62,67 @@ export function cleanTitle(title: string, siteName: string): string {
   )
 }
 
+function stripProgressDecorators(title: string): string {
+  const decoratedProgressPatterns = [
+    /\b(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?|Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?|Temporada\s*\d+\s*(?:Cap[ií]tulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?|(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?)(?:\b.*)?$/i,
+  ]
+
+  for (const pattern of decoratedProgressPatterns) {
+    const match = pattern.exec(title)
+    if (match && match.index > 0) {
+      return compactText(title.slice(0, match.index))
+    }
+  }
+
+  return title
+}
+
+export function looksLikeStandaloneProgressLabel(title: string): boolean {
+  const normalized = compactText(title)
+
+  const standaloneProgressPatterns = [
+    /^(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?)$/i,
+    /^(?:Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?)$/i,
+    /^(?:Temporada\s*\d+\s*(?:Cap[ií]tulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?)$/i,
+    /^(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?$/i,
+  ]
+
+  return standaloneProgressPatterns.some((pattern) => pattern.test(normalized))
+}
+
+export function resolveDetectedTitle(
+  siteName: string,
+  candidates: Array<string | null | undefined>,
+): string | null {
+  const useProgressStripping = !/youtube/i.test(siteName)
+  const seen = new Set<string>()
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue
+    }
+
+    const cleaned = cleanTitle(candidate, siteName)
+    if (!cleaned || isPlaceholderTitle(cleaned, siteName)) {
+      continue
+    }
+
+    if (seen.has(cleaned)) {
+      continue
+    }
+    seen.add(cleaned)
+
+    if (!looksLikeStandaloneProgressLabel(cleaned)) {
+      const stripped = useProgressStripping ? stripProgressDecorators(cleaned) : cleaned
+      if (stripped && !looksLikeStandaloneProgressLabel(stripped)) {
+        return stripped
+      }
+    }
+  }
+
+  return null
+}
+
 export function isPlaceholderTitle(title: string, siteName: string): boolean {
   const normalizedTitle = normalizeTitle(title)
   const normalizedSite = normalizeTitle(siteName)
@@ -122,6 +183,26 @@ export function parseProgress(text: string): {
         episode,
         episodeTotal,
         progressLabel: `S${season} ${episode}${episodeTotal ? `/${episodeTotal}` : ''}`,
+      }
+    }
+  }
+
+  const episodePatterns = [
+    /Episode\s*(\d+)(?:\s*\/\s*(\d+))?/i,
+    /Episodio\s*(\d+)(?:\s*\/\s*(\d+))?/i,
+    /Ep\.?\s*(\d+)(?:\s*\/\s*(\d+))?/i,
+  ]
+
+  for (const pattern of episodePatterns) {
+    const match = normalized.match(pattern)
+    if (match) {
+      const episode = Number(match[1])
+      const episodeTotal = match[2] ? Number(match[2]) : undefined
+
+      return {
+        episode,
+        episodeTotal,
+        progressLabel: `Ep ${episode}${episodeTotal ? `/${episodeTotal}` : ''}`,
       }
     }
   }
