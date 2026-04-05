@@ -21,7 +21,14 @@ pnpm install
 pnpm build
 pnpm test
 pnpm dev
+pnpm deps:policy
 ```
+
+## Dependency policy
+- Direct dependencies are pinned to exact versions only; no `^` or `~`.
+- `.npmrc` enforces `save-exact=true` and `minimumReleaseAge=1440` for PNPM.
+- `preinstall` runs `scripts/enforce-dependency-policy.mjs` and blocks dependencies published less than 24 hours ago.
+- Emergency bypass exists only through `WATCHLOG_SKIP_DEP_POLICY=1`.
 
 ## Load the extension
 1. Run `pnpm build`.
