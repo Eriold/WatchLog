@@ -64,6 +64,16 @@ body {
   gap: 10px;
 }
 
+.popup-language-select {
+  min-width: 0;
+}
+
+.popup-language-select .select {
+  min-width: 152px;
+  padding: 10px 14px;
+  border-radius: 16px;
+}
+
 .popup-mode-chip {
   padding: 10px 14px;
   background: rgba(15, 23, 42, 0.48);

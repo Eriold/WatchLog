@@ -1,12 +1,20 @@
 import { startTransition, useEffect, useState } from 'react'
 import { addFromExplorer, addList, getExplorer, getLibrary, updateEntry } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
-import { getListLabel, toLibraryEntries } from '../shared/selectors'
+import { toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type { LibraryEntry, MetadataCard, WatchLogSnapshot } from '../shared/types'
+import {
+  formatLocalizedDate,
+  getLocalizedListDefinitionLabel,
+  getLocalizedListLabel,
+  getLocalizedMediaTypeLabel,
+} from '../shared/i18n/helpers'
+import { useI18n } from '../shared/i18n/useI18n'
+import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import './sidepanel.css'
 
-const LIBRARY_VIEW_ID = 'library'
+const ALL_TITLES_VIEW_ID = 'all-titles'
 const FAVORITES_VIEW_ID = 'favorites'
 
 function getInitialSnapshot(): WatchLogSnapshot {
@@ -14,49 +22,43 @@ function getInitialSnapshot(): WatchLogSnapshot {
 }
 
 function getViewCount(viewId: string, entries: LibraryEntry[], explorerItems: MetadataCard[]): number {
-  if (viewId === LIBRARY_VIEW_ID) return entries.length
+  if (viewId === ALL_TITLES_VIEW_ID) return entries.length
   if (viewId === FAVORITES_VIEW_ID) return entries.filter((entry) => entry.activity.favorite).length
   if (viewId === EXPLORER_TAB_ID) return explorerItems.length
   return entries.filter((entry) => entry.activity.status === viewId).length
 }
 
-function getViewTitle(viewId: string, snapshot: WatchLogSnapshot): string {
-  if (viewId === LIBRARY_VIEW_ID) return 'Library'
-  if (viewId === FAVORITES_VIEW_ID) return 'Favorites'
-  if (viewId === EXPLORER_TAB_ID) return 'Explorer'
-  return getListLabel(snapshot.lists, viewId)
+function getViewTitle(
+  viewId: string,
+  snapshot: WatchLogSnapshot,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  if (viewId === ALL_TITLES_VIEW_ID) return t('views.allTitles')
+  if (viewId === FAVORITES_VIEW_ID) return t('views.favorites')
+  if (viewId === EXPLORER_TAB_ID) return t('views.explorer')
+  return getLocalizedListLabel(snapshot.lists, viewId, t)
 }
 
-function getViewDescription(viewId: string): string {
-  if (viewId === LIBRARY_VIEW_ID) {
-    return 'Browse every saved title, resume fast and keep the full catalog in one place.'
+function getViewDescription(
+  viewId: string,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  if (viewId === ALL_TITLES_VIEW_ID) {
+    return t('library.viewDescription.allTitles')
   }
   if (viewId === 'watching') {
-    return 'Continue active sessions and jump back into the latest source.'
+    return t('library.viewDescription.watching')
   }
   if (viewId === 'completed') {
-    return 'Archive finished titles without losing history or notes.'
+    return t('library.viewDescription.completed')
   }
   if (viewId === FAVORITES_VIEW_ID) {
-    return 'Highlight the entries you want to keep closest.'
+    return t('library.viewDescription.favorites')
   }
   if (viewId === EXPLORER_TAB_ID) {
-    return 'Seed the library with temporary API-like cards before real providers land.'
+    return t('library.viewDescription.explorer')
   }
-  return 'Review the queue, update progress and manage your saved titles.'
-}
-
-function getMediaTypeLabel(mediaType: string): string {
-  const labels: Record<string, string> = {
-    movie: 'Movie',
-    series: 'Series',
-    anime: 'Anime',
-    manga: 'Manga',
-    novel: 'Novel',
-    video: 'Video',
-  }
-
-  return labels[mediaType] ?? 'Unknown'
+  return t('library.viewDescription.custom')
 }
 
 function getProgressPercent(entry: LibraryEntry): number {
@@ -79,13 +81,15 @@ function getStatusTone(status: string, favorite: boolean): string {
   if (status === 'watching') return 'watching'
   if (status === 'completed') return 'completed'
   if (status === 'paused') return 'paused'
+  if (status === 'library') return 'planned'
   if (status === 'planned') return 'planned'
   return 'default'
 }
 
 export function SidePanelApp() {
+  const { locale, t } = useI18n()
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
-  const [selectedViewId, setSelectedViewId] = useState(LIBRARY_VIEW_ID)
+  const [selectedViewId, setSelectedViewId] = useState(ALL_TITLES_VIEW_ID)
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
   const [libraryQuery, setLibraryQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -95,7 +99,21 @@ export function SidePanelApp() {
   const [explorerItems, setExplorerItems] = useState<MetadataCard[]>([])
   const [newListLabel, setNewListLabel] = useState('')
   const [drafts, setDrafts] = useState<Record<string, { notes: string; progressText: string; listId: string; favorite: boolean }>>({})
-  const [statusMessage, setStatusMessage] = useState('Loading WatchLog library...')
+  const [statusMessageState, setStatusMessageState] = useState<{
+    key:
+      | 'library.loading'
+      | 'library.ready'
+      | 'library.listCreated'
+      | 'library.listCreateFailed'
+      | 'library.entryUpdated'
+      | 'library.explorerRefreshed'
+      | 'library.addedToLibrary'
+    params?: Record<string, string>
+  }>({ key: 'library.loading' })
+
+  useEffect(() => {
+    document.title = t('titles.library')
+  }, [t])
 
   useEffect(() => {
     let cancelled = false
@@ -105,7 +123,7 @@ export function SidePanelApp() {
       startTransition(() => {
         setSnapshot(libraryResponse.snapshot)
         setExplorerItems(explorerResponse.items)
-        setStatusMessage('Library ready.')
+        setStatusMessageState({ key: 'library.ready' })
       })
     }
     void load()
@@ -116,15 +134,15 @@ export function SidePanelApp() {
 
   const entries = toLibraryEntries(snapshot)
   const primaryViews = [
-    { id: LIBRARY_VIEW_ID, label: 'Library', icon: 'LB' },
-    { id: 'watching', label: 'Watching', icon: 'PL' },
-    { id: 'completed', label: 'Finished', icon: 'OK' },
-    { id: FAVORITES_VIEW_ID, label: 'Favorites', icon: 'FV' },
-    { id: EXPLORER_TAB_ID, label: 'Explorer', icon: 'EX' },
+    { id: ALL_TITLES_VIEW_ID, label: t('views.allTitles'), icon: 'LB' },
+    { id: 'watching', label: t('lists.watching'), icon: 'PL' },
+    { id: 'completed', label: t('lists.completed'), icon: 'OK' },
+    { id: FAVORITES_VIEW_ID, label: t('views.favorites'), icon: 'FV' },
+    { id: EXPLORER_TAB_ID, label: t('views.explorer'), icon: 'EX' },
   ]
   const queueLists = snapshot.lists.filter((list) => !['watching', 'completed'].includes(list.id))
   const baseEntries = entries.filter((entry) => {
-    if (selectedViewId === LIBRARY_VIEW_ID) return true
+    if (selectedViewId === ALL_TITLES_VIEW_ID) return true
     if (selectedViewId === FAVORITES_VIEW_ID) return entry.activity.favorite
     if (selectedViewId === EXPLORER_TAB_ID) return false
     return entry.activity.status === selectedViewId
@@ -165,7 +183,9 @@ export function SidePanelApp() {
     : null
 
   const typeOptions = Array.from(new Set(entries.map((entry) => entry.catalog.mediaType))).sort()
-  const sourceOptions = Array.from(new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown'))).sort()
+  const sourceOptions = Array.from(
+    new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown')),
+  ).sort()
 
   function updateDraft(patch: Partial<{ notes: string; progressText: string; listId: string; favorite: boolean }>): void {
     if (!selectedEntry || !selectedDraft) return
@@ -177,10 +197,20 @@ export function SidePanelApp() {
 
   async function handleAddList(): Promise<void> {
     if (!newListLabel.trim()) return
-    const response = await addList(newListLabel)
-    setSnapshot(response.snapshot)
-    setNewListLabel('')
-    setStatusMessage(`List "${response.list.label}" created.`)
+    try {
+      const response = await addList(newListLabel.trim())
+      const libraryResponse = await getLibrary()
+      setSnapshot(libraryResponse.snapshot)
+      setSelectedViewId(response.list.id)
+      setSelectedCatalogId(null)
+      setNewListLabel('')
+      setStatusMessageState({
+        key: 'library.listCreated',
+        params: { label: response.list.label },
+      })
+    } catch {
+      setStatusMessageState({ key: 'library.listCreateFailed' })
+    }
   }
 
   async function handleSaveEntry(): Promise<void> {
@@ -193,22 +223,27 @@ export function SidePanelApp() {
       progress: { progressText: selectedDraft.progressText },
     })
     setSnapshot(response.snapshot)
-    setStatusMessage('Entry updated.')
+    setStatusMessageState({ key: 'library.entryUpdated' })
   }
 
   async function handleExplorerSearch(): Promise<void> {
     const response = await getExplorer(explorerQuery)
     setExplorerItems(response.items)
-    setStatusMessage('Explorer refreshed.')
+    setStatusMessageState({ key: 'library.explorerRefreshed' })
   }
 
   async function handleExplorerAdd(item: MetadataCard): Promise<void> {
-    const response = await addFromExplorer(item.id, 'planned')
+    const response = await addFromExplorer(item.id, 'library')
     setSnapshot(response.snapshot)
-    setSelectedViewId(LIBRARY_VIEW_ID)
+    setSelectedViewId('library')
     setSelectedCatalogId(response.entry.catalog.id)
-    setStatusMessage(`${item.title} added to Por ver.`)
+    setStatusMessageState({
+      key: 'library.addedToLibrary',
+      params: { title: item.title },
+    })
   }
+
+  const statusMessage = t(statusMessageState.key, statusMessageState.params)
 
   return (
     <div className="sidepanel-shell library-shell">
@@ -218,8 +253,8 @@ export function SidePanelApp() {
             <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
           </div>
           <div>
-            <h1 className="library-brand-title">WatchLog</h1>
-            <p className="library-brand-status">Status: Local-first</p>
+            <h1 className="library-brand-title">{t('common.appName')}</h1>
+            <p className="library-brand-status">{t('library.statusLocalFirst')}</p>
           </div>
         </div>
 
@@ -234,14 +269,21 @@ export function SidePanelApp() {
               <span className="library-nav-icon">{view.icon}</span>
               <span className="library-nav-copy">
                 <strong>{view.label}</strong>
-                <span>{getViewCount(view.id, entries, explorerItems)} items</span>
+                <span>
+                  {t(
+                    getViewCount(view.id, entries, explorerItems) === 1
+                      ? 'library.items.one'
+                      : 'library.items.other',
+                    { count: getViewCount(view.id, entries, explorerItems) },
+                  )}
+                </span>
               </span>
             </button>
           ))}
         </nav>
 
         <div className="library-sidebar-section">
-          <p className="library-sidebar-label">Queues</p>
+          <p className="library-sidebar-label">{t('library.queues')}</p>
           <div className="library-queue-list">
             {queueLists.map((list) => (
               <button
@@ -250,42 +292,52 @@ export function SidePanelApp() {
                 type="button"
                 onClick={() => setSelectedViewId(list.id)}
               >
-                {list.label}
+                {getLocalizedListDefinitionLabel(list, t)}
               </button>
             ))}
           </div>
         </div>
 
         <div className="library-sidebar-section">
-          <p className="library-sidebar-label">Create list</p>
+          <p className="library-sidebar-label">{t('library.createList')}</p>
           <input
             className="field"
             value={newListLabel}
-            placeholder="Weekend binge"
+            placeholder={t('library.createListPlaceholder')}
             onChange={(event) => setNewListLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void handleAddList()
+              }
+            }}
           />
           <button className="button secondary" type="button" onClick={handleAddList}>
-            Add list
+            {t('library.addList')}
           </button>
         </div>
 
         <button className="library-settings-button" type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
-          Settings
+          {t('common.settings')}
         </button>
       </aside>
 
       <div className="library-main">
         <header className="library-topbar">
           <div>
-            <h2 className="library-topbar-title">WatchLog Library</h2>
-            <p className="library-topbar-subtitle">{getViewDescription(selectedViewId)}</p>
+            <h2 className="library-topbar-title">{t('library.topbarTitle')}</h2>
+            <p className="library-topbar-subtitle">{getViewDescription(selectedViewId, t)}</p>
           </div>
           <div className="library-topbar-actions">
             <label className="library-search">
-              <span>Search</span>
+              <span>{t('common.search')}</span>
               <input
                 value={selectedViewId === EXPLORER_TAB_ID ? explorerQuery : libraryQuery}
-                placeholder={selectedViewId === EXPLORER_TAB_ID ? 'Scan explorer...' : 'Scan library...'}
+                placeholder={
+                  selectedViewId === EXPLORER_TAB_ID
+                    ? t('library.searchExplorerPlaceholder')
+                    : t('library.searchLibraryPlaceholder')
+                }
                 onChange={(event) =>
                   selectedViewId === EXPLORER_TAB_ID
                     ? setExplorerQuery(event.target.value)
@@ -293,9 +345,10 @@ export function SidePanelApp() {
                 }
               />
             </label>
+            <LanguageSelect className="library-language-select" compact />
             {selectedViewId === EXPLORER_TAB_ID ? (
               <button className="library-chip-button" type="button" onClick={() => void handleExplorerSearch()}>
-                Search
+                {t('library.searchAction')}
               </button>
             ) : (
               <span className="library-status-chip">{statusMessage}</span>
@@ -306,25 +359,32 @@ export function SidePanelApp() {
         <main className="library-content">
           <section className="library-filter-bar">
             <div className="library-filter-group">
-              <span className="library-filter-chip is-static">{getViewTitle(selectedViewId, snapshot)}</span>
+              <span className="library-filter-chip is-static">
+                {getViewTitle(selectedViewId, snapshot, t)}
+              </span>
               {selectedViewId !== EXPLORER_TAB_ID ? (
                 <>
                   <label className="library-filter-chip">
                     <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                      <option value="all">Type: All</option>
+                      <option value="all">{t('library.typeAll')}</option>
                       {typeOptions.map((mediaType) => (
                         <option key={mediaType} value={mediaType}>
-                          {`Type: ${getMediaTypeLabel(mediaType)}`}
+                          {`${t('library.typePrefix')}: ${getLocalizedMediaTypeLabel(
+                            mediaType as LibraryEntry['catalog']['mediaType'],
+                            t,
+                          )}`}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="library-filter-chip">
                     <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                      <option value="all">Platform: Any</option>
+                      <option value="all">{t('library.platformAny')}</option>
                       {sourceOptions.map((source) => (
                         <option key={source} value={source}>
-                          {`Platform: ${source}`}
+                          {`${t('library.platformPrefix')}: ${
+                            source === 'Unknown' ? t('common.unknown') : source
+                          }`}
                         </option>
                       ))}
                     </select>
@@ -337,14 +397,26 @@ export function SidePanelApp() {
               {selectedViewId !== EXPLORER_TAB_ID ? (
                 <label className="library-filter-chip">
                   <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                    <option value="recent">Sort: Recents</option>
-                    <option value="title">Sort: Title</option>
-                    <option value="progress">Sort: Progress</option>
+                    <option value="recent">{t('library.sortRecents')}</option>
+                    <option value="title">{t('library.sortTitle')}</option>
+                    <option value="progress">{t('library.sortProgress')}</option>
                   </select>
                 </label>
               ) : null}
               <span className="library-status-chip">
-                {selectedViewId === EXPLORER_TAB_ID ? `${explorerItems.length} explorer cards` : `${filteredEntries.length} visible items`}
+                {selectedViewId === EXPLORER_TAB_ID
+                  ? t(
+                      explorerItems.length === 1
+                        ? 'library.explorerCards.one'
+                        : 'library.explorerCards.other',
+                      { count: explorerItems.length },
+                    )
+                  : t(
+                      filteredEntries.length === 1
+                        ? 'library.visibleItems.one'
+                        : 'library.visibleItems.other',
+                      { count: filteredEntries.length },
+                    )}
               </span>
             </div>
           </section>
@@ -357,13 +429,15 @@ export function SidePanelApp() {
                     <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
                     <span className="library-card-overlay" />
                     <div className="library-card-badges">
-                      <span className="media-badge tone-default">{getMediaTypeLabel(item.mediaType)}</span>
+                      <span className="media-badge tone-default">
+                        {getLocalizedMediaTypeLabel(item.mediaType, t)}
+                      </span>
                     </div>
                   </div>
                   <div className="library-card-body">
                     <div>
                       <h3 className="library-card-title">{item.title}</h3>
-                      <p className="library-card-source">Mock catalog</p>
+                      <p className="library-card-source">{t('library.mockCatalog')}</p>
                     </div>
                     <div className="genre-row">
                       {item.genres.slice(0, 3).map((genre) => (
@@ -372,7 +446,7 @@ export function SidePanelApp() {
                     </div>
                     <p className="library-card-description">{item.description}</p>
                     <button className="button" type="button" onClick={() => void handleExplorerAdd(item)}>
-                      Add to Por ver
+                      {t('library.addToLibrary')}
                     </button>
                   </div>
                 </article>
@@ -380,8 +454,8 @@ export function SidePanelApp() {
             </section>
           ) : filteredEntries.length === 0 ? (
             <section className="library-empty-state panel">
-              <h3>No titles matched this view.</h3>
-              <p>Save something from the popup, change the filters or add a mock card from Explorer.</p>
+              <h3>{t('library.noTitlesMatched')}</h3>
+              <p>{t('library.noTitlesHint')}</p>
             </section>
           ) : (
             <>
@@ -389,7 +463,7 @@ export function SidePanelApp() {
                 {filteredEntries.map((entry) => {
                   const tone = getStatusTone(entry.activity.status, entry.activity.favorite)
                   const progress = getProgressPercent(entry)
-                  const platform = entry.activity.lastSource?.siteName ?? 'Manual entry'
+                  const platform = entry.activity.lastSource?.siteName ?? t('library.manualEntry')
 
                   return (
                     <article
@@ -401,12 +475,18 @@ export function SidePanelApp() {
                         <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
                         <span className="library-card-overlay" />
                         <div className="library-card-badges">
-                          <span className={`media-badge tone-${tone}`}>{getMediaTypeLabel(entry.catalog.mediaType)}</span>
-                          {entry.activity.favorite ? <span className="favorite-badge">Favorite</span> : null}
+                          <span className={`media-badge tone-${tone}`}>
+                            {getLocalizedMediaTypeLabel(entry.catalog.mediaType, t)}
+                          </span>
+                          {entry.activity.favorite ? <span className="favorite-badge">{t('common.favorite')}</span> : null}
                         </div>
                         <div className="library-card-progress">
                           <div className="library-card-progress-copy">
-                            <span>{entry.activity.status === 'completed' ? 'Completed' : 'Active track'}</span>
+                            <span>
+                              {entry.activity.status === 'completed'
+                                ? t('library.completedTrack')
+                                : t('library.activeTrack')}
+                            </span>
                             <span>{progress > 0 ? `${progress}%` : entry.activity.currentProgress.progressText}</span>
                           </div>
                           <div className="library-card-progress-track">
@@ -420,7 +500,9 @@ export function SidePanelApp() {
                           <p className="library-card-source">{platform}</p>
                         </div>
                         <div className="genre-row">
-                          {(entry.catalog.genres.length > 0 ? entry.catalog.genres : [getListLabel(snapshot.lists, entry.activity.status)])
+                          {(entry.catalog.genres.length > 0
+                            ? entry.catalog.genres
+                            : [getLocalizedListLabel(snapshot.lists, entry.activity.status, t)])
                             .slice(0, 3)
                             .map((token) => (
                               <span className="genre-chip" key={token}>{token}</span>
@@ -437,40 +519,48 @@ export function SidePanelApp() {
                 <section className="panel library-detail-panel">
                   <div className="library-detail-head">
                     <div>
-                      <p className="library-detail-kicker">Focused detail</p>
+                      <p className="library-detail-kicker">{t('library.focusedDetail')}</p>
                       <h3 className="library-detail-title">{selectedEntry.catalog.title}</h3>
-                      <p className="library-detail-copy">{selectedEntry.catalog.description ?? 'No metadata yet.'}</p>
+                      <p className="library-detail-copy">
+                        {selectedEntry.catalog.description ?? t('library.noMetadataYet')}
+                      </p>
                     </div>
                     <div className="library-detail-pill-row">
-                      <span className="library-status-chip">{getMediaTypeLabel(selectedEntry.catalog.mediaType)}</span>
+                      <span className="library-status-chip">
+                        {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
+                      </span>
                       <span className="library-status-chip">{selectedEntry.activity.currentProgress.progressText}</span>
                     </div>
                   </div>
 
                   <div className="library-detail-grid">
                     <div className="field-card">
-                      <label className="label" htmlFor="entry-list">Primary list</label>
+                      <label className="label" htmlFor="entry-list">{t('library.primaryList')}</label>
                       <select id="entry-list" className="select" value={selectedDraft.listId} onChange={(event) => updateDraft({ listId: event.target.value })}>
                         {snapshot.lists.map((list) => (
-                          <option key={list.id} value={list.id}>{list.label}</option>
+                          <option key={list.id} value={list.id}>
+                            {getLocalizedListDefinitionLabel(list, t)}
+                          </option>
                         ))}
                       </select>
                     </div>
                     <div className="field-card">
-                      <label className="label" htmlFor="entry-progress">Progress label</label>
+                      <label className="label" htmlFor="entry-progress">{t('popup.progressLabel')}</label>
                       <input id="entry-progress" className="field" value={selectedDraft.progressText} onChange={(event) => updateDraft({ progressText: event.target.value })} />
                     </div>
                     <div className="field-card field-card-wide">
-                      <label className="label" htmlFor="entry-notes">Notes</label>
+                      <label className="label" htmlFor="entry-notes">{t('library.notes')}</label>
                       <textarea id="entry-notes" className="textarea" value={selectedDraft.notes} onChange={(event) => updateDraft({ notes: event.target.value })} />
                     </div>
                   </div>
 
                   <div className="library-detail-actions">
-                    <button className="button" type="button" onClick={handleSaveEntry}>Save changes</button>
+                    <button className="button" type="button" onClick={handleSaveEntry}>
+                      {t('library.saveChanges')}
+                    </button>
                     {selectedEntry.activity.lastSource?.url ? (
                       <a className="button secondary" href={selectedEntry.activity.lastSource.url} rel="noreferrer" target="_blank">
-                        Resume source
+                        {t('library.resumeSource')}
                       </a>
                     ) : null}
                     <button
@@ -478,7 +568,7 @@ export function SidePanelApp() {
                       type="button"
                       onClick={() => updateDraft({ favorite: !selectedDraft.favorite })}
                     >
-                      {selectedDraft.favorite ? 'Favorite enabled' : 'Mark as favorite'}
+                      {selectedDraft.favorite ? t('library.favoriteEnabled') : t('library.markFavorite')}
                     </button>
                   </div>
 
@@ -492,7 +582,9 @@ export function SidePanelApp() {
                             <span>{source.progressText}</span>
                           </div>
                         </div>
-                        <span className="history-date">{new Date(source.detectedAt).toLocaleDateString()}</span>
+                        <span className="history-date">
+                          {formatLocalizedDate(source.detectedAt, locale)}
+                        </span>
                       </a>
                     ))}
                   </div>

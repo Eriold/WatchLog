@@ -3,21 +3,10 @@ export const STORAGE_KEYS = {
   activity: 'watchlog.activity',
   lists: 'watchlog.lists',
   detectionByTab: 'watchlog.detectionByTab',
+  locale: 'watchlog.locale',
 } as const
 
 export const SYSTEM_LISTS = [
-  {
-    id: 'watching',
-    label: 'Viendo',
-    kind: 'system',
-    description: 'Items the user is actively following.',
-  },
-  {
-    id: 'planned',
-    label: 'Por ver',
-    kind: 'system',
-    description: 'Items saved for later.',
-  },
   {
     id: 'completed',
     label: 'Finalizado',
@@ -25,10 +14,16 @@ export const SYSTEM_LISTS = [
     description: 'Finished items.',
   },
   {
-    id: 'paused',
-    label: 'Pausado',
+    id: 'watching',
+    label: 'Viendo',
     kind: 'system',
-    description: 'Items temporarily paused.',
+    description: 'Items the user is actively following.',
+  },
+  {
+    id: 'library',
+    label: 'Library',
+    kind: 'system',
+    description: 'General library bucket for saved items.',
   },
 ] as const
 

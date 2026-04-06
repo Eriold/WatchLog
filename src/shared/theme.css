@@ -107,6 +107,11 @@ select {
   padding: 12px 14px;
 }
 
+.compact-language-select {
+  min-width: 148px;
+  padding-right: 34px;
+}
+
 .textarea {
   min-height: 88px;
   resize: vertical;

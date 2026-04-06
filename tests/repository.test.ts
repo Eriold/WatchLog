@@ -14,10 +14,9 @@ class MemoryStorageProvider implements StorageProvider {
     catalog: [],
     activity: [],
     lists: [
+      { id: 'library', label: 'Library', kind: 'system' },
       { id: 'watching', label: 'Viendo', kind: 'system' },
-      { id: 'planned', label: 'Por ver', kind: 'system' },
       { id: 'completed', label: 'Finalizado', kind: 'system' },
-      { id: 'paused', label: 'Pausado', kind: 'system' },
     ],
   }
 
@@ -133,7 +132,7 @@ describe('WatchLogRepository', () => {
         genres: ['Action'],
         description: 'Mock',
       },
-      'planned',
+      'library',
     )
 
     const custom = await repository.addList('Weekend')

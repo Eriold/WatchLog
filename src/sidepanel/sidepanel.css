@@ -203,6 +203,12 @@
   gap: 12px;
 }
 
+.library-language-select .select {
+  min-width: 178px;
+  min-height: 42px;
+  border-radius: 999px;
+}
+
 .library-search {
   display: flex;
   align-items: center;

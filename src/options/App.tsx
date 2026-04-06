@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { exportActivity, exportCatalog, getLibrary, importBackup } from '../shared/client'
+import { useI18n } from '../shared/i18n/useI18n'
+import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import { downloadJson } from '../shared/utils/download'
 import type {
   ExportActivityPayload,
@@ -17,33 +19,45 @@ function getInitialSnapshot(): WatchLogSnapshot {
 }
 
 export function OptionsApp() {
+  const { t } = useI18n()
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
   const [catalogFile, setCatalogFile] = useState<File | null>(null)
   const [activityFile, setActivityFile] = useState<File | null>(null)
-  const [message, setMessage] = useState('Loading options...')
+  const [messageState, setMessageState] = useState<
+    | 'options.loading'
+    | 'options.ready'
+    | 'options.catalogExported'
+    | 'options.activityExported'
+    | 'options.selectBothFirst'
+    | 'options.imported'
+  >('options.loading')
+
+  useEffect(() => {
+    document.title = t('titles.options')
+  }, [t])
 
   useEffect(() => {
     void getLibrary().then((response) => {
       setSnapshot(response.snapshot)
-      setMessage('Local storage ready. Google Drive sync is planned for phase 2.')
+      setMessageState('options.ready')
     })
   }, [])
 
   async function handleExportCatalog(): Promise<void> {
     const response = await exportCatalog()
     downloadJson('catalog.json', response.payload)
-    setMessage('catalog.json exported.')
+    setMessageState('options.catalogExported')
   }
 
   async function handleExportActivity(): Promise<void> {
     const response = await exportActivity()
     downloadJson('activity.json', response.payload)
-    setMessage('activity.json exported.')
+    setMessageState('options.activityExported')
   }
 
   async function handleImport(): Promise<void> {
     if (!catalogFile || !activityFile) {
-      setMessage('Select both catalog.json and activity.json first.')
+      setMessageState('options.selectBothFirst')
       return
     }
 
@@ -51,40 +65,60 @@ export function OptionsApp() {
     const activity = JSON.parse(await activityFile.text()) as ExportActivityPayload
     const response = await importBackup(catalog, activity)
     setSnapshot(response.snapshot)
-    setMessage('Backup imported into local storage.')
+    setMessageState('options.imported')
   }
+
+  const message = t(messageState)
 
   return (
     <div className="app-shell options-shell">
       <div className="panel options-panel">
-        <div className="brand-lockup">
-          <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
-          <p className="tiny">WatchLog settings</p>
+        <div className="options-topbar">
+          <div className="brand-lockup">
+            <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+            <p className="tiny">{`${t('common.appName')} · ${t('common.settings')}`}</p>
+          </div>
+          <LanguageSelect className="options-language-select" compact />
         </div>
-        <h1 className="section-title">Local storage and project scaffolding</h1>
+        <h1 className="section-title">{t('options.title')}</h1>
         <p className="muted">{message}</p>
 
         <div className="options-grid">
           <section className="options-card stack">
-            <h2 className="section-title">Storage snapshot</h2>
-            <span className="chip">{snapshot.catalog.length} catalog items</span>
-            <span className="chip">{snapshot.activity.length} user records</span>
-            <span className="chip">{snapshot.lists.length} lists configured</span>
+            <h2 className="section-title">{t('options.storageSnapshot')}</h2>
+            <span className="chip">
+              {t(
+                snapshot.catalog.length === 1 ? 'options.catalogItems.one' : 'options.catalogItems.other',
+                { count: snapshot.catalog.length },
+              )}
+            </span>
+            <span className="chip">
+              {t(
+                snapshot.activity.length === 1 ? 'options.userRecords.one' : 'options.userRecords.other',
+                { count: snapshot.activity.length },
+              )}
+            </span>
+            <span className="chip">
+              {t(
+                snapshot.lists.length === 1 ? 'options.listsConfigured.one' : 'options.listsConfigured.other',
+                { count: snapshot.lists.length },
+              )}
+            </span>
             <div className="row">
               <button className="button" type="button" onClick={handleExportCatalog}>
-                Export catalog.json
+                {t('options.exportCatalog')}
               </button>
               <button className="button secondary" type="button" onClick={handleExportActivity}>
-                Export activity.json
+                {t('options.exportActivity')}
               </button>
             </div>
           </section>
 
           <section className="options-card stack">
-            <h2 className="section-title">Import backup</h2>
+            <h2 className="section-title">{t('options.importBackup')}</h2>
             <div>
               <label className="label" htmlFor="catalog-file">
-                catalog.json
+                {t('options.catalogJson')}
               </label>
               <input
                 id="catalog-file"
@@ -96,7 +130,7 @@ export function OptionsApp() {
             </div>
             <div>
               <label className="label" htmlFor="activity-file">
-                activity.json
+                {t('options.activityJson')}
               </label>
               <input
                 id="activity-file"
@@ -107,32 +141,20 @@ export function OptionsApp() {
               />
             </div>
             <button className="button" type="button" onClick={handleImport}>
-              Import backup
+              {t('options.importAction')}
             </button>
           </section>
 
           <section className="options-card stack">
-            <h2 className="section-title">Roadmap hooks</h2>
-            <p className="muted">
-              Google authentication and Drive `appDataFolder` sync are intentionally deferred. The
-              current storage contracts already isolate `catalog.json` and `activity.json`.
-            </p>
-            <p className="tiny">
-              A future `DriveStorageProvider` can replace the local provider without changing the UI
-              contracts.
-            </p>
+            <h2 className="section-title">{t('options.roadmapHooks')}</h2>
+            <p className="muted">{t('options.roadmapBody')}</p>
+            <p className="tiny">{t('options.roadmapHint')}</p>
           </section>
 
           <section className="options-card stack">
-            <h2 className="section-title">Design pipeline</h2>
-            <p className="muted">
-              `/prototype_ui` has been scaffolded as the visual intake folder. Drop future mockups
-              there and wire them into popup, side panel or options surfaces.
-            </p>
-            <p className="tiny">
-              The current UI is intentionally structured, not final. It exists to validate flows and
-              data contracts.
-            </p>
+            <h2 className="section-title">{t('options.designPipeline')}</h2>
+            <p className="muted">{t('options.designBody')}</p>
+            <p className="tiny">{t('options.designHint')}</p>
           </section>
         </div>
       </div>

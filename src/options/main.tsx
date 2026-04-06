@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { I18nProvider } from '../shared/i18n/provider'
 import '../shared/theme.css'
 import { OptionsApp } from './App'
 
@@ -11,6 +12,8 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <OptionsApp />
+    <I18nProvider>
+      <OptionsApp />
+    </I18nProvider>
   </StrictMode>,
 )

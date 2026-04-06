@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getActiveDetection, getLibrary, saveDetection } from '../shared/client'
-import { getListLabel, toLibraryEntries } from '../shared/selectors'
+import { SYSTEM_LISTS } from '../shared/constants'
+import { toLibraryEntries } from '../shared/selectors'
 import type { DetectionResult, LibraryEntry, WatchLogSnapshot } from '../shared/types'
 import type { DetectionDebugInfo } from '../shared/messages'
 import {
@@ -13,6 +14,9 @@ import {
 } from '../shared/detection/helpers'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
+import { getLocalizedListDefinitionLabel, getLocalizedListLabel, getLocalizedMediaTypeLabel } from '../shared/i18n/helpers'
+import { useI18n } from '../shared/i18n/useI18n'
+import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import './popup.css'
 
 function getInitialSnapshot(): WatchLogSnapshot {
@@ -79,25 +83,6 @@ function getHostnameLabel(url: string): string {
     return new URL(url).hostname.replace(/^www\./i, '')
   } catch {
     return url
-  }
-}
-
-function getMediaTypeLabel(mediaType: DetectionResult['mediaType']): string {
-  switch (mediaType) {
-    case 'movie':
-      return 'Movie'
-    case 'series':
-      return 'Series'
-    case 'anime':
-      return 'Anime'
-    case 'manga':
-      return 'Manga'
-    case 'novel':
-      return 'Novel'
-    case 'video':
-      return 'Video'
-    default:
-      return 'Unknown'
   }
 }
 
@@ -333,16 +318,32 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
 }
 
 export function PopupApp() {
+  const { t } = useI18n()
   const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [debug, setDebug] = useState<DetectionDebugInfo>(getEmptyDebug)
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
   const [selectedList, setSelectedList] = useState('watching')
   const [favorite, setFavorite] = useState(false)
-  const [message, setMessage] = useState('Waiting for page analysis...')
+  const [messageState, setMessageState] = useState<{
+    key:
+      | 'common.loading'
+      | 'popup.suggestionReady'
+      | 'popup.analyzeFailed'
+      | 'popup.noSupportedMedia'
+      | 'popup.reanalyzing'
+      | 'popup.stillNoSupportedMedia'
+      | 'popup.saving'
+      | 'popup.savedUnder'
+    params?: Record<string, string>
+  }>({ key: 'common.loading' })
   const [busy, setBusy] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
   const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
+
+  useEffect(() => {
+    document.title = t('titles.popup')
+  }, [t])
 
   async function loadDetection(forceRefresh = false): Promise<DetectionResult | null> {
     const tab = await getPopupTargetTab()
@@ -429,16 +430,16 @@ export function PopupApp() {
       setDetection(activeDetection)
 
       if (activeDetection) {
-        setMessage('Suggestion ready. Review it before saving.')
+        setMessageState({ key: 'popup.suggestionReady' })
         return
       }
 
       if (detectionResult.status === 'rejected' || libraryResult.status === 'rejected') {
-        setMessage('Could not analyze this tab yet. Reload the page and try again.')
+        setMessageState({ key: 'popup.analyzeFailed' })
         return
       }
 
-      setMessage('No supported media detected on this tab yet.')
+      setMessageState({ key: 'popup.noSupportedMedia' })
     }
 
     void loadPopupData()
@@ -449,8 +450,10 @@ export function PopupApp() {
   }, [])
 
   useEffect(() => {
-    if (snapshot.lists.length > 0 && !snapshot.lists.some((list) => list.id === selectedList)) {
-      setSelectedList(snapshot.lists[0].id)
+    const availableLists = snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS]
+
+    if (availableLists.length > 0 && !availableLists.some((list) => list.id === selectedList)) {
+      setSelectedList(availableLists[0].id)
     }
   }, [selectedList, snapshot.lists])
 
@@ -462,16 +465,14 @@ export function PopupApp() {
 
   async function handleRetryAnalysis(): Promise<void> {
     setAnalyzing(true)
-    setMessage('Reanalyzing current tab...')
+    setMessageState({ key: 'popup.reanalyzing' })
 
     try {
       const activeDetection = await loadDetection(true)
       setDetection(activeDetection)
-      setMessage(
-        activeDetection
-          ? 'Suggestion ready. Review it before saving.'
-          : 'Still no supported media detected on this tab.',
-      )
+      setMessageState({
+        key: activeDetection ? 'popup.suggestionReady' : 'popup.stillNoSupportedMedia',
+      })
     } finally {
       setAnalyzing(false)
     }
@@ -483,7 +484,7 @@ export function PopupApp() {
     }
 
     setBusy(true)
-    setMessage('Saving to WatchLog...')
+    setMessageState({ key: 'popup.saving' })
 
     try {
       const response = await saveDetection({
@@ -493,7 +494,12 @@ export function PopupApp() {
       })
 
       setSnapshot(response.snapshot)
-      setMessage(`Saved under ${getListLabel(response.snapshot.lists, selectedList)}.`)
+      setMessageState({
+        key: 'popup.savedUnder',
+        params: {
+          label: getLocalizedListLabel(response.snapshot.lists, selectedList, t),
+        },
+      })
     } finally {
       setBusy(false)
     }
@@ -506,15 +512,18 @@ export function PopupApp() {
     window.close()
   }
 
+  const availableLists = snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS]
   const recentEntries = toLibraryEntries(snapshot).slice(0, 3)
   const sourceHost = detection ? getHostnameLabel(detection.url) : ''
-  const currentListLabel = getListLabel(snapshot.lists, selectedList)
+  const currentListLabel = getLocalizedListLabel(availableLists, selectedList, t)
   const captureProgressPercent = detection ? getDetectionProgressPercent(detection) : 0
-  const activeSessionsLabel = `${recentEntries.length} ${
-    recentEntries.length === 1 ? 'active session' : 'active sessions'
-  }`
+  const activeSessionsLabel = t(
+    recentEntries.length === 1 ? 'popup.activeSession.one' : 'popup.activeSession.other',
+    { count: recentEntries.length },
+  )
   const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
   const fallbackCapturePoster = detection ? capturePoster : '/mock-posters/poster-01.svg'
+  const message = t(messageState.key, messageState.params)
 
   return (
     <div className="app-shell popup-shell">
@@ -523,19 +532,20 @@ export function PopupApp() {
           <div className="brand-lockup popup-brand">
             <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
             <div>
-              <p className="tiny popup-brand-kicker">WatchLog</p>
-              <strong className="popup-brand-name">Quick popup</strong>
+              <p className="tiny popup-brand-kicker">{t('common.appName')}</p>
+              <strong className="popup-brand-name">{t('popup.quickPopup')}</strong>
             </div>
           </div>
           <div className="popup-topbar-actions">
             <span className="chip popup-mode-chip">
               <span className="status-dot" />
-              Local-first
+              {t('common.localFirst')}
             </span>
+            <LanguageSelect className="popup-language-select" compact />
             <button
               className="icon-surface-button"
               type="button"
-              title="Open full library"
+              title={t('popup.openFullLibrary')}
               onClick={openSidePanel}
             >
               <LibraryIcon />
@@ -548,8 +558,8 @@ export function PopupApp() {
             <section className="popup-hero">
               <div className="popup-heading-row">
                 <div>
-                  <p className="eyebrow">Current capture</p>
-                  <h1 className="popup-title">Capture current tab</h1>
+                  <p className="eyebrow">{t('popup.currentCapture')}</p>
+                  <h1 className="popup-title">{t('popup.captureCurrentTab')}</h1>
                 </div>
                 <span className="section-chip">{sourceHost}</span>
               </div>
@@ -587,7 +597,9 @@ export function PopupApp() {
                     <button
                       className={`favorite-icon-button ${favorite ? 'is-active' : ''}`}
                       type="button"
-                      aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
+                      aria-label={
+                        favorite ? t('popup.removeFromFavorites') : t('popup.addToFavorites')
+                      }
                       aria-pressed={favorite}
                       onClick={() => setFavorite((value) => !value)}
                     >
@@ -597,7 +609,7 @@ export function PopupApp() {
 
                   <div className="popup-section">
                     <label className="label popup-compact-label" htmlFor="title">
-                      Title
+                      {t('popup.titleLabel')}
                     </label>
                     <input
                       id="title"
@@ -617,8 +629,8 @@ export function PopupApp() {
                     <div className="capture-progress-copy">
                       <span>
                         {captureProgressPercent > 0
-                          ? `${captureProgressPercent}% complete`
-                          : 'Awaiting progress'}
+                          ? t('popup.completePercent', { percent: captureProgressPercent })
+                          : t('popup.awaitingProgress')}
                       </span>
                       <span>{detection.progressLabel}</span>
                     </div>
@@ -631,7 +643,9 @@ export function PopupApp() {
                   </div>
 
                   <div className="status-row capture-status-row">
-                    <span className="status-pill">{getMediaTypeLabel(detection.mediaType)}</span>
+                    <span className="status-pill">
+                      {getLocalizedMediaTypeLabel(detection.mediaType, t)}
+                    </span>
                     <span className="status-pill">{currentListLabel}</span>
                     <span className="status-pill status-pill-progress">{detection.progressLabel}</span>
                   </div>
@@ -639,7 +653,7 @@ export function PopupApp() {
                   <div className="popup-grid capture-controls">
                     <div className="control-panel">
                       <label className="label popup-compact-label" htmlFor="list">
-                        List
+                        {t('popup.listLabel')}
                       </label>
                       <select
                         id="list"
@@ -647,9 +661,9 @@ export function PopupApp() {
                         value={selectedList}
                         onChange={(event) => setSelectedList(event.target.value)}
                       >
-                        {snapshot.lists.map((list) => (
+                        {availableLists.map((list) => (
                           <option key={list.id} value={list.id}>
-                            {list.label}
+                            {getLocalizedListDefinitionLabel(list, t)}
                           </option>
                         ))}
                       </select>
@@ -657,7 +671,7 @@ export function PopupApp() {
 
                     <div className="control-panel">
                       <label className="label popup-compact-label" htmlFor="progress">
-                        Progress
+                        {t('popup.progressLabel')}
                       </label>
                       <input
                         id="progress"
@@ -690,13 +704,13 @@ export function PopupApp() {
                         }}
                       />
                       <div className="source-copy">
-                        <span className="source-label">Captured link</span>
+                        <span className="source-label">{t('popup.capturedLink')}</span>
                         <strong className="source-host">{sourceHost}</strong>
                       </div>
                     </div>
                     <span className="link-chip">
                       <LaunchIcon />
-                      Open
+                      {t('common.open')}
                     </span>
                   </a>
                 </div>
@@ -704,10 +718,10 @@ export function PopupApp() {
 
               <div className="popup-footer popup-primary-actions">
                 <button className="button" type="button" disabled={busy} onClick={handleSave}>
-                  Save suggestion
+                  {t('popup.saveSuggestion')}
                 </button>
                 <button className="button secondary" type="button" onClick={openSidePanel}>
-                  Open full library
+                  {t('popup.openFullLibrary')}
                 </button>
               </div>
             </section>
@@ -716,33 +730,32 @@ export function PopupApp() {
           <section className="popup-hero">
             <div className="popup-heading-row">
               <div>
-                <p className="eyebrow">Current capture</p>
-                <h1 className="popup-title">Capture current tab</h1>
+                <p className="eyebrow">{t('popup.currentCapture')}</p>
+                <h1 className="popup-title">{t('popup.captureCurrentTab')}</h1>
               </div>
-              <span className="section-chip">No signal</span>
+              <span className="section-chip">{t('popup.noSignal')}</span>
             </div>
 
             <p className="muted popup-message">{message}</p>
 
             <div className="empty-capture-card">
               <div className="empty-capture-copy">
-                <strong>Detection unavailable for this tab right now.</strong>
-                <p className="tiny">
-                  Reanalyze the page or open the full library while the content finishes loading.
-                </p>
+                <strong>{t('popup.detectionUnavailable')}</strong>
+                <p className="tiny">{t('popup.detectionHint')}</p>
               </div>
               <div className="debug-box">
                 <div>
-                  <strong>Source:</strong> {debug.source}
+                  <strong>{t('popup.debugSource')}:</strong> {debug.source}
                 </div>
                 <div>
-                  <strong>Reason:</strong> {debug.reason ?? 'none'}
+                  <strong>{t('popup.debugReason')}:</strong> {debug.reason ?? t('popup.none')}
                 </div>
                 <div>
-                  <strong>Tab:</strong> {debug.tabId ?? targetTabId ?? 'unknown'}
+                  <strong>{t('popup.debugTab')}:</strong>{' '}
+                  {debug.tabId ?? targetTabId ?? t('common.unknown')}
                 </div>
                 <div className="debug-url">
-                  <strong>URL:</strong> {debug.tabUrl ?? 'unknown'}
+                  <strong>{t('popup.debugUrl')}:</strong> {debug.tabUrl ?? t('common.unknown')}
                 </div>
               </div>
             </div>
@@ -754,10 +767,10 @@ export function PopupApp() {
                 disabled={analyzing}
                 onClick={handleRetryAnalysis}
               >
-                Reanalyze tab
+                {t('popup.reanalyzeTab')}
               </button>
               <button className="button secondary" type="button" onClick={openSidePanel}>
-                Open library
+                {t('popup.openFullLibrary')}
               </button>
             </div>
           </section>
@@ -766,16 +779,16 @@ export function PopupApp() {
         <div className="popup-recent">
           <div className="section-heading">
             <div>
-              <h2 className="section-title">Continue watching</h2>
-              <p className="tiny">Resume the latest entries from your local library.</p>
+              <h2 className="section-title">{t('popup.continueWatching')}</h2>
+              <p className="tiny">{t('popup.resumeLatest')}</p>
             </div>
             <span className="section-chip">{activeSessionsLabel}</span>
           </div>
 
           {recentEntries.length === 0 ? (
             <div className="recent-empty-card">
-              <strong>No recent activity yet.</strong>
-              <p className="tiny">Save something from the current page and it will appear here.</p>
+              <strong>{t('popup.noRecentActivity')}</strong>
+              <p className="tiny">{t('popup.noRecentActivityHint')}</p>
             </div>
           ) : (
             recentEntries.map((entry) => (
@@ -812,7 +825,7 @@ export function PopupApp() {
                     <strong className="recent-title">{entry.catalog.title}</strong>
                     <p className="recent-subtitle">
                       {entry.activity.currentProgress.progressText} /{' '}
-                      {getListLabel(snapshot.lists, entry.activity.status)}
+                      {getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}
                     </p>
                   </div>
 
@@ -820,10 +833,10 @@ export function PopupApp() {
                     <div className="recent-progress-copy">
                       <span>
                         {getEntryProgressPercent(entry) > 0
-                          ? `${getEntryProgressPercent(entry)}% complete`
-                          : 'Recently saved'}
+                          ? t('popup.completePercent', { percent: getEntryProgressPercent(entry) })
+                          : t('popup.recentlySaved')}
                       </span>
-                      <span>{getListLabel(snapshot.lists, entry.activity.status)}</span>
+                      <span>{getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}</span>
                     </div>
                     <div className="recent-progress-track">
                       <div

@@ -66,7 +66,13 @@ export class LocalStorageProvider implements StorageProvider {
 
   async addCustomList(label: string): Promise<WatchListDefinition> {
     const lists = await readLists()
-    const baseId = slugify(label) || 'lista'
+    const trimmedLabel = label.trim()
+
+    if (!trimmedLabel) {
+      throw new Error('List label cannot be empty.')
+    }
+
+    const baseId = slugify(trimmedLabel) || 'lista'
     let uniqueId = baseId
     let counter = 2
 
@@ -77,7 +83,7 @@ export class LocalStorageProvider implements StorageProvider {
 
     const list: WatchListDefinition = {
       id: uniqueId,
-      label: label.trim(),
+      label: trimmedLabel,
       kind: 'custom',
       description: 'User-defined collection.',
     }

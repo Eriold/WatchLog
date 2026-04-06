@@ -25,5 +25,16 @@ export async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
 }
 
 export async function sendRuntimeMessage<TResponse>(message: unknown): Promise<TResponse> {
-  return chrome.runtime.sendMessage(message) as Promise<TResponse>
+  const response = await chrome.runtime.sendMessage(message)
+
+  if (
+    response &&
+    typeof response === 'object' &&
+    'error' in response &&
+    typeof response.error === 'string'
+  ) {
+    throw new Error(response.error)
+  }
+
+  return response as TResponse
 }
