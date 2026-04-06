@@ -21,6 +21,7 @@ export type WatchLogMessage =
   | { type: 'watchlog/get-explorer'; payload?: { query?: string } }
   | { type: 'watchlog/update-entry'; payload: UpdateEntryInput }
   | { type: 'watchlog/add-list'; payload: { label: string } }
+  | { type: 'watchlog/remove-list'; payload: { listId: string } }
   | { type: 'watchlog/export-catalog' }
   | { type: 'watchlog/export-activity' }
   | {
@@ -58,6 +59,23 @@ export interface ExplorerResponse {
 
 export interface AddListResponse {
   list: WatchListDefinition
+  snapshot: WatchLogSnapshot
+}
+
+export interface RemoveListResponse {
+  removedListId: string
+  fallbackListId: string
+  snapshot: WatchLogSnapshot
+}
+
+export interface UpdateListResponse {
+  list: WatchListDefinition
+  snapshot: WatchLogSnapshot
+}
+
+export interface ClearListResponse {
+  clearedListId: string
+  removedCatalogIds: string[]
   snapshot: WatchLogSnapshot
 }
 

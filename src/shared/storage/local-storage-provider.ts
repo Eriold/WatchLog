@@ -92,11 +92,14 @@ export class LocalStorageProvider implements StorageProvider {
       counter += 1
     }
 
+    const timestamp = nowIso()
     const list: WatchListDefinition = {
       id: uniqueId,
       label: trimmedLabel,
       kind: 'custom',
       description: 'User-defined collection.',
+      createdAt: timestamp,
+      updatedAt: timestamp,
     }
 
     await writeLists([...lists, list])

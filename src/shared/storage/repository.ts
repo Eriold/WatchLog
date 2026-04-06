@@ -11,6 +11,7 @@ import type {
   SaveDetectionInput,
   SourceHistoryEntry,
   UpdateEntryInput,
+  WatchListDefinition,
   WatchLogSnapshot,
 } from '../types'
 import { normalizeTitle, slugify } from '../utils/normalize'
@@ -261,6 +262,122 @@ export class WatchLogRepository {
         kind: 'custom',
       },
       snapshot,
+    }
+  }
+
+  async removeList(
+    listId: string,
+  ): Promise<{ removedListId: string; fallbackListId: string; snapshot: WatchLogSnapshot }> {
+    const fallbackListId = 'library'
+    const snapshot = await this.storageProvider.getSnapshot()
+    const targetList = snapshot.lists.find((list) => list.id === listId)
+
+    if (!targetList) {
+      throw new Error('List not found.')
+    }
+
+    if (targetList.kind !== 'custom') {
+      throw new Error('System lists cannot be removed.')
+    }
+
+    const nextSnapshot: WatchLogSnapshot = {
+      ...snapshot,
+      lists: snapshot.lists.filter((list) => list.id !== listId),
+      activity: snapshot.activity.map((entry) =>
+        entry.status === listId
+          ? {
+              ...entry,
+              status: fallbackListId,
+              updatedAt: nowIso(),
+            }
+          : entry,
+      ),
+    }
+
+    await this.storageProvider.saveSnapshot(nextSnapshot)
+
+    return {
+      removedListId: listId,
+      fallbackListId,
+      snapshot: nextSnapshot,
+    }
+  }
+
+  async updateList(
+    listId: string,
+    label: string,
+  ): Promise<{ list: WatchListDefinition; snapshot: WatchLogSnapshot }> {
+    const snapshot = await this.storageProvider.getSnapshot()
+    const targetList = snapshot.lists.find((list) => list.id === listId)
+
+    if (!targetList) {
+      throw new Error('List not found.')
+    }
+
+    if (targetList.kind !== 'custom') {
+      throw new Error('System lists cannot be renamed.')
+    }
+
+    const trimmedLabel = label.trim()
+    if (!trimmedLabel) {
+      throw new Error('List label cannot be empty.')
+    }
+
+    const updatedList: WatchListDefinition = {
+      ...targetList,
+      label: trimmedLabel,
+      updatedAt: nowIso(),
+    }
+
+    const nextSnapshot: WatchLogSnapshot = {
+      ...snapshot,
+      lists: snapshot.lists.map((list) => (list.id === listId ? updatedList : list)),
+    }
+
+    await this.storageProvider.saveSnapshot(nextSnapshot)
+
+    return {
+      list: updatedList,
+      snapshot: nextSnapshot,
+    }
+  }
+
+  async clearList(
+    listId: string,
+  ): Promise<{ clearedListId: string; removedCatalogIds: string[]; snapshot: WatchLogSnapshot }> {
+    const snapshot = await this.storageProvider.getSnapshot()
+    const targetList = snapshot.lists.find((list) => list.id === listId)
+
+    if (!targetList) {
+      throw new Error('List not found.')
+    }
+
+    const removedCatalogIds = snapshot.activity
+      .filter((entry) => entry.status === listId)
+      .map((entry) => entry.catalogId)
+
+    const removedCatalogIdSet = new Set(removedCatalogIds)
+
+    const nextSnapshot: WatchLogSnapshot = {
+      ...snapshot,
+      activity: snapshot.activity.filter((entry) => entry.status !== listId),
+      catalog: snapshot.catalog.filter((entry) => !removedCatalogIdSet.has(entry.id)),
+      lists: snapshot.lists.map((list) =>
+        list.id === listId
+          ? {
+              ...list,
+              updatedAt: nowIso(),
+            }
+          : list,
+      ),
+    }
+
+    await this.storageProvider.saveSnapshot(nextSnapshot)
+
+    return {
+      clearedListId: listId,
+      removedCatalogIds,
+      snapshot: nextSnapshot,
     }
   }
 

@@ -1,11 +1,14 @@
 import type {
   ActiveDetectionResponse,
   AddListResponse,
+  ClearListResponse,
   ExplorerResponse,
   ExportActivityResponse,
   ExportCatalogResponse,
   LibraryResponse,
+  RemoveListResponse,
   SaveDetectionResponse,
+  UpdateListResponse,
   UpdateEntryResponse,
   WatchLogMessage,
 } from './messages'
@@ -69,6 +72,18 @@ export async function updateEntry(payload: UpdateEntryInput) {
 
 export async function addList(label: string) {
   return repository.addList(label) as Promise<AddListResponse>
+}
+
+export async function removeList(listId: string) {
+  return repository.removeList(listId) as Promise<RemoveListResponse>
+}
+
+export async function updateList(listId: string, label: string) {
+  return repository.updateList(listId, label) as Promise<UpdateListResponse>
+}
+
+export async function clearList(listId: string) {
+  return repository.clearList(listId) as Promise<ClearListResponse>
 }
 
 export async function exportCatalog() {

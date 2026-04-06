@@ -14,6 +14,8 @@ export interface WatchListDefinition {
   label: string
   kind: ListKind
   description?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ProgressState {

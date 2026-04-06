@@ -1,9 +1,23 @@
 import { startTransition, useEffect, useState } from 'react'
-import { addFromExplorer, addList, getExplorer, getLibrary, updateEntry } from '../shared/client'
+import {
+  addFromExplorer,
+  addList,
+  clearList,
+  getExplorer,
+  getLibrary,
+  removeList,
+  updateList,
+  updateEntry,
+} from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
 import { toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
-import type { LibraryEntry, MetadataCard, WatchLogSnapshot } from '../shared/types'
+import type {
+  LibraryEntry,
+  MetadataCard,
+  WatchListDefinition,
+  WatchLogSnapshot,
+} from '../shared/types'
 import {
   formatLocalizedDate,
   getLocalizedListDefinitionLabel,
@@ -76,6 +90,10 @@ function getProgressPercent(entry: LibraryEntry): number {
   return entry.activity.status === 'completed' ? 100 : 0
 }
 
+function getListEntryCount(listId: string, entries: LibraryEntry[]): number {
+  return entries.filter((entry) => entry.activity.status === listId).length
+}
+
 function getStatusTone(status: string, favorite: boolean): string {
   if (favorite) return 'favorite'
   if (status === 'watching') return 'watching'
@@ -85,6 +103,50 @@ function getStatusTone(status: string, favorite: boolean): string {
   if (status === 'planned') return 'planned'
   return 'default'
 }
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <path
+        d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.63l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42H10.1a.5.5 0 0 0-.5.42l-.36 2.54c-.58.22-1.12.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.85a.5.5 0 0 0 .12.63l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.82 14.52a.5.5 0 0 0-.12.63l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.41 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.8a.5.5 0 0 0 .5-.42l.36-2.54c.58-.22 1.12-.53 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.63l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.4"
+      />
+    </svg>
+  )
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <path
+        d="M6 6 18 18M18 6 6 18"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  )
+}
+
+type ListModalState =
+  | {
+      mode: 'clear'
+      listId: string
+      label: string
+      input: string
+    }
+  | {
+      mode: 'delete'
+      listId: string
+      label: string
+      input: string
+    }
 
 export function SidePanelApp() {
   const { locale, t } = useI18n()
@@ -98,12 +160,18 @@ export function SidePanelApp() {
   const [explorerQuery, setExplorerQuery] = useState('')
   const [explorerItems, setExplorerItems] = useState<MetadataCard[]>([])
   const [newListLabel, setNewListLabel] = useState('')
+  const [activeListSettingsId, setActiveListSettingsId] = useState<string | null>(null)
+  const [listNameDraft, setListNameDraft] = useState('')
+  const [listModalState, setListModalState] = useState<ListModalState | null>(null)
   const [drafts, setDrafts] = useState<Record<string, { notes: string; progressText: string; listId: string; favorite: boolean }>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
       | 'library.loading'
       | 'library.ready'
       | 'library.listCreated'
+      | 'library.listUpdated'
+      | 'library.listDeleted'
+      | 'library.listCleared'
       | 'library.listCreateFailed'
       | 'library.errorWithReason'
       | 'library.entryUpdated'
@@ -192,6 +260,8 @@ export function SidePanelApp() {
     { id: EXPLORER_TAB_ID, label: t('views.explorer'), icon: 'EX' },
   ]
   const queueLists = snapshot.lists.filter((list) => !['watching', 'completed'].includes(list.id))
+  const activeListSettings =
+    queueLists.find((list) => list.id === activeListSettingsId) ?? null
   const baseEntries = entries.filter((entry) => {
     if (selectedViewId === ALL_TITLES_VIEW_ID) return true
     if (selectedViewId === FAVORITES_VIEW_ID) return entry.activity.favorite
@@ -277,6 +347,121 @@ export function SidePanelApp() {
     }
   }
 
+  function handleOpenListSettings(list: WatchListDefinition): void {
+    setActiveListSettingsId(list.id)
+    setListNameDraft(list.label)
+    setListModalState(null)
+  }
+
+  async function handleSaveListName(): Promise<void> {
+    if (!activeListSettings || activeListSettings.kind !== 'custom') {
+      return
+    }
+
+    try {
+      const response = await updateList(activeListSettings.id, listNameDraft)
+      setSnapshot(response.snapshot)
+      setListNameDraft(response.list.label)
+      setStatusMessageState({
+        key: 'library.listUpdated',
+        params: { label: response.list.label },
+      })
+    } catch (error) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: error instanceof Error ? error.message : t('library.listCreateFailed'),
+        },
+      })
+    }
+  }
+
+  function handleRequestClearList(): void {
+    if (!activeListSettings) {
+      return
+    }
+
+    setListModalState({
+      mode: 'clear',
+      listId: activeListSettings.id,
+      label: activeListSettings.label,
+      input: '',
+    })
+  }
+
+  function handleRequestDeleteList(): void {
+    if (!activeListSettings || activeListSettings.kind !== 'custom') {
+      return
+    }
+
+    setListModalState({
+      mode: 'delete',
+      listId: activeListSettings.id,
+      label: activeListSettings.label,
+      input: '',
+    })
+  }
+
+  async function handleConfirmListModal(): Promise<void> {
+    if (!listModalState) {
+      return
+    }
+
+    if (listModalState.mode === 'clear') {
+      try {
+        const response = await clearList(listModalState.listId)
+        setSnapshot(response.snapshot)
+        setSelectedCatalogId(null)
+        setListModalState(null)
+        setStatusMessageState({
+          key: 'library.listCleared',
+          params: { label: listModalState.label },
+        })
+      } catch (error) {
+        setStatusMessageState({
+          key: 'library.errorWithReason',
+          params: {
+            reason: error instanceof Error ? error.message : 'clear-list-failed',
+          },
+        })
+      }
+      return
+    }
+
+    if (listModalState.input.trim() !== listModalState.label) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: t('library.deleteListTypeName'),
+        },
+      })
+      return
+    }
+
+    try {
+      const response = await removeList(listModalState.listId)
+      setSnapshot(response.snapshot)
+      setSelectedCatalogId(null)
+      if (selectedViewId === listModalState.listId) {
+        setSelectedViewId(response.fallbackListId)
+      }
+      setActiveListSettingsId(null)
+      setListNameDraft('')
+      setListModalState(null)
+      setStatusMessageState({
+        key: 'library.listDeleted',
+        params: { label: listModalState.label },
+      })
+    } catch (error) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: error instanceof Error ? error.message : t('library.listCreateFailed'),
+        },
+      })
+    }
+  }
+
   async function handleSaveEntry(): Promise<void> {
     if (!selectedEntry || !selectedDraft) return
     const response = await updateEntry({
@@ -350,14 +535,35 @@ export function SidePanelApp() {
           <p className="library-sidebar-label">{t('library.queues')}</p>
           <div className="library-queue-list">
             {queueLists.map((list) => (
-              <button
+              <div
                 key={list.id}
-                className={`queue-chip ${selectedViewId === list.id ? 'is-active' : ''}`}
-                type="button"
-                onClick={() => setSelectedViewId(list.id)}
+                className={`queue-list-item is-removable ${selectedViewId === list.id ? 'is-active' : ''}`}
               >
-                {getLocalizedListDefinitionLabel(list, t)}
-              </button>
+                <button
+                  className="queue-list-main"
+                  type="button"
+                  onClick={() => setSelectedViewId(list.id)}
+                >
+                  <strong>{getLocalizedListDefinitionLabel(list, t)}</strong>
+                  <span>
+                    {t(
+                      getListEntryCount(list.id, entries) === 1
+                        ? 'library.items.one'
+                        : 'library.items.other',
+                      { count: getListEntryCount(list.id, entries) },
+                    )}
+                  </span>
+                </button>
+                <button
+                  className="queue-list-settings"
+                  type="button"
+                  title={t('library.listSettings')}
+                  aria-label={t('library.listSettings')}
+                  onClick={() => handleOpenListSettings(list)}
+                >
+                  <SettingsIcon className="queue-settings-icon" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -382,7 +588,8 @@ export function SidePanelApp() {
         </div>
 
         <button className="library-settings-button" type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
-          {t('common.settings')}
+          <SettingsIcon className="library-settings-icon" />
+          <span>{t('common.settings')}</span>
         </button>
       </aside>
 
@@ -658,6 +865,166 @@ export function SidePanelApp() {
           )}
         </main>
       </div>
+
+      <aside className={`list-settings-drawer ${activeListSettings ? 'is-open' : ''}`}>
+        {activeListSettings ? (
+          <>
+            <div className="list-settings-header">
+              <div>
+                <p className="library-detail-kicker">{t('library.listSettings')}</p>
+                <h3 className="list-settings-title">{activeListSettings.label}</h3>
+              </div>
+              <button
+                className="list-settings-close"
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setActiveListSettingsId(null)}
+              >
+                <CloseIcon className="list-settings-close-icon" />
+              </button>
+            </div>
+
+            <div className="list-settings-metrics">
+              <div className="field-card">
+                <span className="list-settings-metric-label">{t('library.listCreatedAt')}</span>
+                <strong>
+                  {activeListSettings.createdAt
+                    ? formatLocalizedDate(activeListSettings.createdAt, locale)
+                    : t('common.unknown')}
+                </strong>
+              </div>
+              <div className="field-card">
+                <span className="list-settings-metric-label">{t('library.listItemCount')}</span>
+                <strong>
+                  {t(
+                    getListEntryCount(activeListSettings.id, entries) === 1
+                      ? 'library.items.one'
+                      : 'library.items.other',
+                    { count: getListEntryCount(activeListSettings.id, entries) },
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="field-card list-settings-section">
+              <label className="label" htmlFor="list-name-draft">
+                {t('library.listName')}
+              </label>
+              <input
+                id="list-name-draft"
+                className="field"
+                value={listNameDraft}
+                disabled={activeListSettings.kind !== 'custom'}
+                onChange={(event) => setListNameDraft(event.target.value)}
+              />
+              <button
+                className="button secondary"
+                type="button"
+                disabled={
+                  activeListSettings.kind !== 'custom' ||
+                  listNameDraft.trim() === activeListSettings.label
+                }
+                onClick={() => void handleSaveListName()}
+              >
+                {t('library.saveListName')}
+              </button>
+            </div>
+
+            <div className="field-card list-settings-section">
+              <p className="list-settings-action-copy">
+                {t('library.clearListConfirmBody', { label: activeListSettings.label })}
+              </p>
+              <button className="button secondary" type="button" onClick={handleRequestClearList}>
+                {t('library.clearList')}
+              </button>
+            </div>
+
+            {activeListSettings.kind === 'custom' ? (
+              <div className="field-card list-settings-section list-settings-danger">
+                <p className="list-settings-action-copy">
+                  {t('library.deleteListConfirmBody', { label: activeListSettings.label })}
+                </p>
+                <button className="button danger" type="button" onClick={handleRequestDeleteList}>
+                  {t('library.deleteList')}
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </aside>
+
+      {listModalState ? (
+        <div className="library-modal-backdrop" role="presentation">
+          <div className="library-modal panel" role="dialog" aria-modal="true">
+            <div className="list-settings-header">
+              <div>
+                <p className="library-detail-kicker">
+                  {listModalState.mode === 'delete'
+                    ? t('library.deleteList')
+                    : t('library.clearList')}
+                </p>
+                <h3 className="list-settings-title">
+                  {listModalState.mode === 'delete'
+                    ? t('library.deleteListConfirmTitle')
+                    : t('library.clearListConfirmTitle')}
+                </h3>
+              </div>
+              <button
+                className="list-settings-close"
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setListModalState(null)}
+              >
+                <CloseIcon className="list-settings-close-icon" />
+              </button>
+            </div>
+
+            <p className="library-detail-copy">
+              {listModalState.mode === 'delete'
+                ? t('library.deleteListConfirmBody', { label: listModalState.label })
+                : t('library.clearListConfirmBody', { label: listModalState.label })}
+            </p>
+
+            {listModalState.mode === 'delete' ? (
+              <div className="field-card list-settings-section">
+                <label className="label" htmlFor="delete-list-confirm">
+                  {t('library.deleteListTypeName')}
+                </label>
+                <input
+                  id="delete-list-confirm"
+                  className="field"
+                  value={listModalState.input}
+                  onChange={(event) =>
+                    setListModalState({
+                      ...listModalState,
+                      input: event.target.value,
+                    })
+                  }
+                />
+              </div>
+            ) : null}
+
+            <div className="library-modal-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setListModalState(null)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                className={`button ${listModalState.mode === 'delete' ? 'danger' : ''}`}
+                type="button"
+                onClick={() => void handleConfirmListModal()}
+              >
+                {listModalState.mode === 'delete'
+                  ? t('library.confirmDeleteList')
+                  : t('library.confirmClearList')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

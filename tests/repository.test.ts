@@ -29,10 +29,13 @@ class MemoryStorageProvider implements StorageProvider {
   }
 
   async addCustomList(label: string): Promise<WatchListDefinition> {
+    const timestamp = '2026-04-05T00:00:00.000Z'
     const list = {
       id: label.toLowerCase().replace(/\s+/g, '-'),
       label,
       kind: 'custom' as const,
+      createdAt: timestamp,
+      updatedAt: timestamp,
     }
 
     this.snapshot.lists.push(list)
@@ -174,5 +177,62 @@ describe('WatchLogRepository', () => {
     })
 
     expect(response.entry.catalog.poster).toContain('WatchLogTemporaryPoster')
+  })
+
+  it('removes custom lists and reassigns their entries to library', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const custom = await repository.addList('Weekend')
+    const saved = await repository.addFromMetadata(
+      {
+        id: 'akira',
+        title: 'Akira',
+        normalizedTitle: 'akira',
+        mediaType: 'movie',
+        genres: ['Anime'],
+        description: 'Mock',
+      },
+      custom.list.id,
+    )
+
+    expect(saved.entry.activity.status).toBe(custom.list.id)
+
+    const removed = await repository.removeList(custom.list.id)
+    const updated = removed.snapshot.activity.find(
+      (entry) => entry.catalogId === saved.entry.catalog.id,
+    )
+
+    expect(removed.snapshot.lists.some((list) => list.id === custom.list.id)).toBe(false)
+    expect(updated?.status).toBe('library')
+  })
+
+  it('renames and clears a custom list', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const custom = await repository.addList('Weekend')
+    await repository.addFromMetadata(
+      {
+        id: 'ghost-in-the-shell',
+        title: 'Ghost in the Shell',
+        normalizedTitle: 'ghost in the shell',
+        mediaType: 'movie',
+        genres: ['Anime'],
+        description: 'Mock',
+      },
+      custom.list.id,
+    )
+
+    const renamed = await repository.updateList(custom.list.id, 'Weekend Archive')
+    const cleared = await repository.clearList(custom.list.id)
+
+    expect(renamed.list.label).toBe('Weekend Archive')
+    expect(cleared.snapshot.activity.some((entry) => entry.status === custom.list.id)).toBe(false)
+    expect(cleared.snapshot.catalog.some((entry) => entry.id === 'ghost-in-the-shell')).toBe(false)
   })
 })
