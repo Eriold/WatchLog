@@ -104,6 +104,48 @@ function getStatusTone(status: string, favorite: boolean): string {
   return 'default'
 }
 
+function getRemainingUnits(entry: LibraryEntry): number | null {
+  const progress = entry.activity.currentProgress
+
+  if (progress.episode !== undefined && progress.episodeTotal) {
+    return Math.max(0, progress.episodeTotal - progress.episode)
+  }
+
+  if (progress.chapter !== undefined && progress.chapterTotal) {
+    return Math.max(0, progress.chapterTotal - progress.chapter)
+  }
+
+  return null
+}
+
+function getProgressCurrentValue(entry: LibraryEntry): string {
+  const progress = entry.activity.currentProgress
+
+  if (progress.episode !== undefined) {
+    return String(progress.episode).padStart(2, '0')
+  }
+
+  if (progress.chapter !== undefined) {
+    return String(progress.chapter).padStart(2, '0')
+  }
+
+  return '--'
+}
+
+function getProgressTotalValue(entry: LibraryEntry): string {
+  const progress = entry.activity.currentProgress
+
+  if (progress.episodeTotal !== undefined) {
+    return String(progress.episodeTotal).padStart(2, '0')
+  }
+
+  if (progress.chapterTotal !== undefined) {
+    return String(progress.chapterTotal).padStart(2, '0')
+  }
+
+  return '--'
+}
+
 function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
@@ -289,10 +331,13 @@ export function SidePanelApp() {
     })
 
   const selectedEntry =
-    entries.find((entry) =>
-      filteredEntries.some((candidate) => candidate.catalog.id === (selectedCatalogId ?? filteredEntries[0]?.catalog.id)) &&
-      entry.catalog.id === (selectedCatalogId ?? filteredEntries[0]?.catalog.id),
-    ) ?? null
+    selectedCatalogId === null
+      ? null
+      : entries.find(
+          (entry) =>
+            entry.catalog.id === selectedCatalogId &&
+            filteredEntries.some((candidate) => candidate.catalog.id === selectedCatalogId),
+        ) ?? null
 
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? {
@@ -302,6 +347,7 @@ export function SidePanelApp() {
         favorite: selectedEntry.activity.favorite,
       }
     : null
+  const activeOverlay = activeListSettings ? 'list' : selectedEntry ? 'entry' : null
 
   const typeOptions = Array.from(new Set(entries.map((entry) => entry.catalog.mediaType))).sort()
   const sourceOptions = Array.from(
@@ -314,6 +360,51 @@ export function SidePanelApp() {
       ...current,
       [selectedEntry.catalog.id]: { ...selectedDraft, ...patch },
     }))
+  }
+
+  async function handleToggleFavorite(): Promise<void> {
+    if (!selectedEntry || !selectedDraft) return
+
+    const previousFavorite = selectedDraft.favorite
+    const nextFavorite = !previousFavorite
+
+    setDrafts((current) => ({
+      ...current,
+      [selectedEntry.catalog.id]: { ...selectedDraft, favorite: nextFavorite },
+    }))
+
+    try {
+      const response = await updateEntry({
+        catalogId: selectedEntry.catalog.id,
+        favorite: nextFavorite,
+      })
+
+      setSnapshot(response.snapshot)
+
+      if (response.entry) {
+        const persistedFavorite = response.entry.activity.favorite
+        setDrafts((current) => ({
+          ...current,
+          [selectedEntry.catalog.id]: {
+            ...(current[selectedEntry.catalog.id] ?? selectedDraft),
+            favorite: persistedFavorite,
+          },
+        }))
+      }
+
+      setStatusMessageState({ key: 'library.entryUpdated' })
+    } catch (error) {
+      setDrafts((current) => ({
+        ...current,
+        [selectedEntry.catalog.id]: { ...selectedDraft, favorite: previousFavorite },
+      }))
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: error instanceof Error ? error.message : 'favorite-toggle-failed',
+        },
+      })
+    }
   }
 
   async function handleAddList(): Promise<void> {
@@ -348,6 +439,7 @@ export function SidePanelApp() {
   }
 
   function handleOpenListSettings(list: WatchListDefinition): void {
+    setSelectedCatalogId(null)
     setActiveListSettingsId(list.id)
     setListNameDraft(list.label)
     setListModalState(null)
@@ -460,6 +552,11 @@ export function SidePanelApp() {
         },
       })
     }
+  }
+
+  function handleSelectEntry(catalogId: string): void {
+    setActiveListSettingsId(null)
+    setSelectedCatalogId(catalogId)
   }
 
   async function handleSaveEntry(): Promise<void> {
@@ -740,7 +837,7 @@ export function SidePanelApp() {
                     <article
                       key={entry.catalog.id}
                       className={`library-card ${selectedEntry?.catalog.id === entry.catalog.id ? 'is-selected' : ''}`}
-                      onClick={() => setSelectedCatalogId(entry.catalog.id)}
+                      onClick={() => handleSelectEntry(entry.catalog.id)}
                     >
                       <div className="library-card-poster-wrap">
                         <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
@@ -786,66 +883,189 @@ export function SidePanelApp() {
                 })}
               </section>
 
-              {selectedEntry && selectedDraft ? (
-                <section className="panel library-detail-panel">
-                  <div className="library-detail-head">
-                    <div>
-                      <p className="library-detail-kicker">{t('library.focusedDetail')}</p>
-                      <h3 className="library-detail-title">{selectedEntry.catalog.title}</h3>
-                      <p className="library-detail-copy">
-                        {selectedEntry.catalog.description ?? t('library.noMetadataYet')}
-                      </p>
-                    </div>
-                    <div className="library-detail-pill-row">
-                      <span className="library-status-chip">
-                        {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
-                      </span>
-                      <span className="library-status-chip">{selectedEntry.activity.currentProgress.progressText}</span>
+              {selectedEntry && selectedDraft ? null : null}
+            </>
+          )}
+        </main>
+      </div>
+
+      <aside className={`entry-detail-drawer ${selectedEntry ? 'is-open' : ''}`}>
+        {selectedEntry && selectedDraft ? (
+          <>
+            <div className="entry-detail-header">
+                <div className="entry-detail-badges">
+                <span className={`media-badge tone-${getStatusTone(selectedEntry.activity.status, selectedDraft.favorite)}`}>
+                  {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
+                </span>
+                <span className="media-badge tone-planned">
+                  {getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}
+                </span>
+              </div>
+              <button
+                className={`favorite-toggle-chip ${selectedDraft.favorite ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => void handleToggleFavorite()}
+              >
+                {selectedDraft.favorite ? t('library.favoriteEnabled') : t('library.markFavorite')}
+              </button>
+            </div>
+
+            <div className="entry-detail-body">
+              <div className="entry-detail-poster-wrap">
+                <div className="entry-detail-poster-glow" />
+                <div className="entry-detail-poster-card">
+                  <img
+                    className="entry-detail-poster"
+                    src={selectedEntry.catalog.poster ?? getTemporaryPoster(selectedEntry.catalog.normalizedTitle)}
+                    alt={selectedEntry.catalog.title}
+                  />
+                  <span className="entry-detail-status-pill">
+                    {getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="entry-detail-title-block">
+                <h3 className="entry-detail-title">{selectedEntry.catalog.title}</h3>
+                <p className="entry-detail-platform">
+                  {t('library.detectedOn', {
+                    site: selectedEntry.activity.lastSource?.siteName ?? t('library.manualEntry'),
+                  })}
+                </p>
+              </div>
+
+              <div className="entry-progress-module">
+                <div className="entry-progress-head">
+                  <div className="entry-progress-main">
+                    <span className="entry-progress-label">{t('library.entryProgressModule')}</span>
+                    <div className="entry-progress-numbers">
+                      <strong>{getProgressCurrentValue(selectedEntry)}</strong>
+                      <span>/ {getProgressTotalValue(selectedEntry)}</span>
                     </div>
                   </div>
-
-                  <div className="library-detail-grid">
-                    <div className="field-card">
-                      <label className="label" htmlFor="entry-list">{t('library.primaryList')}</label>
-                      <select id="entry-list" className="select" value={selectedDraft.listId} onChange={(event) => updateDraft({ listId: event.target.value })}>
-                        {snapshot.lists.map((list) => (
-                          <option key={list.id} value={list.id}>
-                            {getLocalizedListDefinitionLabel(list, t)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-card">
-                      <label className="label" htmlFor="entry-progress">{t('popup.progressLabel')}</label>
-                      <input id="entry-progress" className="field" value={selectedDraft.progressText} onChange={(event) => updateDraft({ progressText: event.target.value })} />
-                    </div>
-                    <div className="field-card field-card-wide">
-                      <label className="label" htmlFor="entry-notes">{t('library.notes')}</label>
-                      <textarea id="entry-notes" className="textarea" value={selectedDraft.notes} onChange={(event) => updateDraft({ notes: event.target.value })} />
+                  <div className="entry-progress-side">
+                    <span className="entry-progress-label">{t('popup.progressLabel')}</span>
+                    <div className="entry-progress-side-value">
+                      {getRemainingUnits(selectedEntry) !== null
+                        ? t('library.entryRemaining', {
+                            count: getRemainingUnits(selectedEntry) ?? 0,
+                          })
+                        : selectedEntry.activity.currentProgress.progressText}
                     </div>
                   </div>
+                </div>
+                <div className="entry-progress-track">
+                  <div
+                    className="entry-progress-value"
+                    style={{ width: `${getProgressPercent(selectedEntry)}%` }}
+                  />
+                </div>
+              </div>
 
-                  <div className="library-detail-actions">
-                    <button className="button" type="button" onClick={handleSaveEntry}>
-                      {t('library.saveChanges')}
-                    </button>
-                    {selectedEntry.activity.lastSource?.url ? (
-                      <a className="button secondary" href={selectedEntry.activity.lastSource.url} rel="noreferrer" target="_blank">
-                        {t('library.resumeSource')}
-                      </a>
-                    ) : null}
-                    <button
-                      className={`favorite-toggle-chip ${selectedDraft.favorite ? 'is-active' : ''}`}
-                      type="button"
-                      onClick={() => updateDraft({ favorite: !selectedDraft.favorite })}
-                    >
-                      {selectedDraft.favorite ? t('library.favoriteEnabled') : t('library.markFavorite')}
-                    </button>
+              <div className="entry-detail-actions-stack">
+                <button className="button" type="button" onClick={handleSaveEntry}>
+                  {t('library.saveChanges')}
+                </button>
+                {selectedEntry.activity.lastSource?.url ? (
+                  <a
+                    className="button secondary"
+                    href={selectedEntry.activity.lastSource.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {t('library.resumeSource')}
+                  </a>
+                ) : null}
+              </div>
+
+              <div className="entry-detail-grid">
+                <div className="field-card">
+                  <label className="label" htmlFor="entry-list">
+                    {t('library.primaryList')}
+                  </label>
+                  <select
+                    id="entry-list"
+                    className="select"
+                    value={selectedDraft.listId}
+                    onChange={(event) => updateDraft({ listId: event.target.value })}
+                  >
+                    {snapshot.lists.map((list) => (
+                      <option key={list.id} value={list.id}>
+                        {getLocalizedListDefinitionLabel(list, t)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-card">
+                  <label className="label" htmlFor="entry-progress">
+                    {t('popup.progressLabel')}
+                  </label>
+                  <input
+                    id="entry-progress"
+                    className="field"
+                    value={selectedDraft.progressText}
+                    onChange={(event) => updateDraft({ progressText: event.target.value })}
+                  />
+                </div>
+                <div className="field-card field-card-wide">
+                  <label className="label" htmlFor="entry-notes">
+                    {t('library.notes')}
+                  </label>
+                  <textarea
+                    id="entry-notes"
+                    className="textarea"
+                    value={selectedDraft.notes}
+                    onChange={(event) => updateDraft({ notes: event.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="field-card entry-technical-block">
+                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+                <div className="entry-technical-grid">
+                  <div>
+                    <span className="entry-technical-label">{t('library.primaryList')}</span>
+                    <strong>{getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}</strong>
                   </div>
+                  <div>
+                    <span className="entry-technical-label">{t('popup.progressLabel')}</span>
+                    <strong>{selectedEntry.activity.currentProgress.progressText}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.listItemCount')}</span>
+                    <strong>{selectedEntry.catalog.genres.length > 0 ? selectedEntry.catalog.genres.join(', ') : t('library.noMetadataYet')}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('common.search')}</span>
+                    <strong>{selectedEntry.activity.lastSource?.pageTitle ?? t('common.unknown')}</strong>
+                  </div>
+                </div>
+              </div>
 
-                  <div className="history-table">
-                    {selectedEntry.activity.sourceHistory.map((source) => (
-                      <a key={source.id} className="history-row" href={source.url || '#'} rel="noreferrer" target="_blank">
+              <div className="field-card entry-history-block">
+                <div className="entry-history-head">
+                  <p className="library-detail-kicker">{t('library.entryHistory')}</p>
+                  <button
+                    className="list-settings-close"
+                    type="button"
+                    aria-label={t('library.entryClosePanel')}
+                    onClick={() => setSelectedCatalogId(null)}
+                  >
+                    <CloseIcon className="list-settings-close-icon" />
+                  </button>
+                </div>
+                <div className="history-table">
+                  {selectedEntry.activity.sourceHistory.length === 0 ? (
+                    <p className="library-detail-copy">{t('library.entryNoHistory')}</p>
+                  ) : (
+                    selectedEntry.activity.sourceHistory.map((source) => (
+                      <a
+                        key={source.id}
+                        className="history-row"
+                        href={source.url || '#'}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
                         <div className="history-site">
                           {source.favicon ? <img src={source.favicon} alt="" /> : null}
                           <div>
@@ -857,19 +1077,22 @@ export function SidePanelApp() {
                           {formatLocalizedDate(source.detectedAt, locale)}
                         </span>
                       </a>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </>
-          )}
-        </main>
-      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </aside>
 
       <div
-        className={`list-settings-scrim ${activeListSettings ? 'is-visible' : ''}`}
+        className={`list-settings-scrim ${activeOverlay ? 'is-visible' : ''}`}
         aria-hidden="true"
-        onClick={() => setActiveListSettingsId(null)}
+        onClick={() => {
+          setActiveListSettingsId(null)
+          setSelectedCatalogId(null)
+        }}
       />
 
       <aside className={`list-settings-drawer ${activeListSettings ? 'is-open' : ''}`}>
