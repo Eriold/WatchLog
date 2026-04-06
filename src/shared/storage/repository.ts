@@ -16,6 +16,7 @@ import type {
 import { normalizeTitle, slugify } from '../utils/normalize'
 import { nowIso } from '../utils/time'
 import type { StorageProvider } from './provider'
+import { getRandomTemporaryPoster, hasTemporaryPoster } from '../mock-posters'
 
 function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   const detectedAt = nowIso()
@@ -49,13 +50,14 @@ function createProgressState(detection: DetectionResult): ProgressState {
 
 function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard): CatalogEntry {
   const timestamp = nowIso()
+  const temporaryPoster = getRandomTemporaryPoster()
 
   return {
     id: metadata?.id ?? `catalog-${slugify(detection.title)}-${Date.now()}`,
     title: metadata?.title ?? detection.title,
     normalizedTitle: metadata?.normalizedTitle ?? detection.normalizedTitle,
     mediaType: metadata?.mediaType ?? detection.mediaType,
-    poster: metadata?.poster,
+    poster: metadata?.poster ?? temporaryPoster,
     backdrop: metadata?.backdrop,
     genres: metadata?.genres ?? [],
     description: metadata?.description,
@@ -129,7 +131,12 @@ export class WatchLogRepository {
       ? {
           ...catalogMatch,
           updatedAt: nowIso(),
-          poster: catalogMatch.poster ?? metadata?.poster,
+          poster:
+            (catalogMatch.poster && !hasTemporaryPoster(catalogMatch.poster)
+              ? catalogMatch.poster
+              : metadata?.poster) ??
+            catalogMatch.poster ??
+            getRandomTemporaryPoster(),
           genres: catalogMatch.genres.length > 0 ? catalogMatch.genres : metadata?.genres ?? [],
           description: catalogMatch.description ?? metadata?.description,
           runtime: catalogMatch.runtime ?? metadata?.runtime,

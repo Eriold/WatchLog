@@ -12,6 +12,7 @@ import {
   resolveDetectedTitle,
 } from '../shared/detection/helpers'
 import { normalizeTitle } from '../shared/utils/normalize'
+import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
 import './popup.css'
 
 function getInitialSnapshot(): WatchLogSnapshot {
@@ -341,6 +342,7 @@ export function PopupApp() {
   const [busy, setBusy] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
+  const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
 
   async function loadDetection(forceRefresh = false): Promise<DetectionResult | null> {
     const tab = await getPopupTargetTab()
@@ -452,6 +454,12 @@ export function PopupApp() {
     }
   }, [selectedList, snapshot.lists])
 
+  useEffect(() => {
+    if (detection) {
+      setCapturePoster(getRandomTemporaryPoster())
+    }
+  }, [detection])
+
   async function handleRetryAnalysis(): Promise<void> {
     setAnalyzing(true)
     setMessage('Reanalyzing current tab...')
@@ -508,6 +516,7 @@ export function PopupApp() {
     recentEntries.length === 1 ? 'active session' : 'active sessions'
   }`
   const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
+  const fallbackCapturePoster = detection ? capturePoster : '/mock-posters/poster-01.svg'
 
   return (
     <div className="app-shell popup-shell">
@@ -552,6 +561,12 @@ export function PopupApp() {
               <article className="capture-card">
                 <div className="capture-art">
                   <div className="capture-art-surface">
+                    <img
+                      className="capture-art-image"
+                      src={fallbackCapturePoster}
+                      alt={`${detection.title} temporary poster`}
+                    />
+                    <span className="capture-art-overlay" />
                     <span className="capture-site">{detection.sourceSite}</span>
                     <strong className="capture-initials">{captureInitials}</strong>
                     <span className="capture-play-badge">
@@ -768,17 +783,16 @@ export function PopupApp() {
             recentEntries.map((entry) => (
               <article className="recent-card" key={entry.catalog.id}>
                 <div className="recent-art">
-                  {entry.catalog.poster ? (
-                    <img
-                      className="recent-art-image"
-                      src={entry.catalog.poster}
-                      alt={`${entry.catalog.title} poster`}
-                    />
-                  ) : (
+                  <img
+                    className="recent-art-image"
+                    src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)}
+                    alt={`${entry.catalog.title} poster`}
+                  />
+                  {!entry.catalog.poster ? (
                     <span className="recent-art-fallback">
                       {getTitleInitials(entry.catalog.title)}
                     </span>
-                  )}
+                  ) : null}
                   <span className="recent-art-overlay" />
                   <span className="recent-play-badge">
                     <PlayIcon />

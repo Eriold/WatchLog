@@ -151,4 +151,29 @@ describe('WatchLogRepository', () => {
     expect(updated.entry?.activity.favorite).toBe(true)
     expect(updated.entry?.activity.currentProgress.progressText).toBe('Ready for Saturday')
   })
+
+  it('assigns a temporary poster when metadata is not available yet', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'Signal Unknown',
+        normalizedTitle: 'signal unknown',
+        mediaType: 'series',
+        sourceSite: 'animeav1.com',
+        url: 'https://animeav1.com/media/signal-unknown/1',
+        favicon: 'https://animeav1.com/favicon.ico',
+        pageTitle: 'Signal Unknown Episodio 1',
+        episode: 1,
+        progressLabel: 'Ep 1',
+        confidence: 0.65,
+      },
+    })
+
+    expect(response.entry.catalog.poster).toContain('WatchLogTemporaryPoster')
+  })
 })
