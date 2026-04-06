@@ -105,6 +105,7 @@ export function SidePanelApp() {
       | 'library.ready'
       | 'library.listCreated'
       | 'library.listCreateFailed'
+      | 'library.errorWithReason'
       | 'library.entryUpdated'
       | 'library.explorerRefreshed'
       | 'library.addedToLibrary'
@@ -118,17 +119,67 @@ export function SidePanelApp() {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const [libraryResponse, explorerResponse] = await Promise.all([getLibrary(), getExplorer()])
-      if (cancelled) return
-      startTransition(() => {
-        setSnapshot(libraryResponse.snapshot)
-        setExplorerItems(explorerResponse.items)
-        setStatusMessageState({ key: 'library.ready' })
-      })
+      console.log('[WatchLog] library:bootstrap:start')
+      try {
+        const [libraryResponse, explorerResponse] = await Promise.all([getLibrary(), getExplorer()])
+        console.log('[WatchLog] library:bootstrap:response', {
+          libraryResponse,
+          explorerResponse,
+        })
+        if (cancelled) return
+        startTransition(() => {
+          setSnapshot(libraryResponse.snapshot)
+          setExplorerItems(explorerResponse.items)
+          setStatusMessageState({ key: 'library.ready' })
+        })
+      } catch (error) {
+        console.error('[WatchLog] library:bootstrap:error', error)
+        if (cancelled) return
+        setStatusMessageState({
+          key: 'library.errorWithReason',
+          params: {
+            reason: error instanceof Error ? error.message : 'bootstrap-failed',
+          },
+        })
+      }
     }
     void load()
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleStorageChange = async (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (
+        areaName !== 'local' ||
+        (!('watchlog.catalog' in changes) &&
+          !('watchlog.activity' in changes) &&
+          !('watchlog.lists' in changes))
+      ) {
+        return
+      }
+
+      console.log('[WatchLog] library:storage-change', { areaName, changes })
+
+      try {
+        const response = await getLibrary()
+        console.log('[WatchLog] library:storage-refresh', response.snapshot.lists)
+        startTransition(() => {
+          setSnapshot(response.snapshot)
+        })
+      } catch (error) {
+        console.error('[WatchLog] library:storage-refresh:error', error)
+      }
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
     }
   }, [])
 
@@ -197,9 +248,16 @@ export function SidePanelApp() {
 
   async function handleAddList(): Promise<void> {
     if (!newListLabel.trim()) return
+    console.log('[WatchLog] handleAddList:start', {
+      label: newListLabel,
+      selectedViewId,
+      currentLists: snapshot.lists,
+    })
     try {
       const response = await addList(newListLabel.trim())
+      console.log('[WatchLog] handleAddList:response', response)
       const libraryResponse = await getLibrary()
+      console.log('[WatchLog] handleAddList:librarySnapshot', libraryResponse.snapshot.lists)
       setSnapshot(libraryResponse.snapshot)
       setSelectedViewId(response.list.id)
       setSelectedCatalogId(null)
@@ -208,8 +266,14 @@ export function SidePanelApp() {
         key: 'library.listCreated',
         params: { label: response.list.label },
       })
-    } catch {
-      setStatusMessageState({ key: 'library.listCreateFailed' })
+    } catch (error) {
+      console.error('[WatchLog] handleAddList:error', error)
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: error instanceof Error ? error.message : t('library.listCreateFailed'),
+        },
+      })
     }
   }
 

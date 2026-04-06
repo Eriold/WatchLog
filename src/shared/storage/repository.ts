@@ -247,8 +247,13 @@ export class WatchLogRepository {
   }
 
   async addList(label: string): Promise<{ list: { id: string; label: string; kind: 'custom' }; snapshot: WatchLogSnapshot }> {
+    console.log('[WatchLog] repository:addList:start', { label })
     const list = await this.storageProvider.addCustomList(label)
     const snapshot = await this.storageProvider.getSnapshot()
+    console.log('[WatchLog] repository:addList:result', {
+      list,
+      snapshotLists: snapshot.lists,
+    })
     return {
       list: {
         id: list.id,

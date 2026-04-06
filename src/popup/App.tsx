@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getActiveDetection, getLibrary, saveDetection } from '../shared/client'
-import { SYSTEM_LISTS } from '../shared/constants'
+import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
 import { toLibraryEntries } from '../shared/selectors'
 import type { DetectionResult, LibraryEntry, WatchLogSnapshot } from '../shared/types'
 import type { DetectionDebugInfo } from '../shared/messages'
@@ -14,7 +14,12 @@ import {
 } from '../shared/detection/helpers'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
-import { getLocalizedListDefinitionLabel, getLocalizedListLabel, getLocalizedMediaTypeLabel } from '../shared/i18n/helpers'
+import {
+  getLocalizedListDefinitionLabel,
+  getLocalizedListLabel,
+  getLocalizedMediaTypeLabel,
+  getSortedLocalizedLists,
+} from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import './popup.css'
@@ -318,7 +323,7 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
 }
 
 export function PopupApp() {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [debug, setDebug] = useState<DetectionDebugInfo>(getEmptyDebug)
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
@@ -450,12 +455,41 @@ export function PopupApp() {
   }, [])
 
   useEffect(() => {
-    const availableLists = snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS]
+    const handleStorageChange = async (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (
+        areaName !== 'local' ||
+        !(STORAGE_KEYS.lists in changes) &&
+          !(STORAGE_KEYS.catalog in changes) &&
+          !(STORAGE_KEYS.activity in changes)
+      ) {
+        return
+      }
+
+      const response = await getLibrary()
+      setSnapshot(response.snapshot)
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    const availableLists = getSortedLocalizedLists(
+      snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS],
+      locale,
+      t,
+    )
 
     if (availableLists.length > 0 && !availableLists.some((list) => list.id === selectedList)) {
       setSelectedList(availableLists[0].id)
     }
-  }, [selectedList, snapshot.lists])
+  }, [locale, selectedList, snapshot.lists, t])
 
   useEffect(() => {
     if (detection) {
@@ -512,7 +546,11 @@ export function PopupApp() {
     window.close()
   }
 
-  const availableLists = snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS]
+  const availableLists = getSortedLocalizedLists(
+    snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS],
+    locale,
+    t,
+  )
   const recentEntries = toLibraryEntries(snapshot).slice(0, 3)
   const sourceHost = detection ? getHostnameLabel(detection.url) : ''
   const currentListLabel = getLocalizedListLabel(availableLists, selectedList, t)

@@ -9,6 +9,9 @@ import type {
   UpdateEntryResponse,
   WatchLogMessage,
 } from './messages'
+import { MockMetadataProvider } from './metadata/mock-provider'
+import { LocalStorageProvider } from './storage/local-storage-provider'
+import { WatchLogRepository } from './storage/repository'
 import type {
   ExportActivityPayload,
   ExportCatalogPayload,
@@ -16,6 +19,9 @@ import type {
   UpdateEntryInput,
 } from './types'
 import { sendRuntimeMessage } from './storage/browser'
+
+const metadataProvider = new MockMetadataProvider()
+const repository = new WatchLogRepository(new LocalStorageProvider(), metadataProvider)
 
 export async function getActiveDetection(tabId?: number) {
   return sendRuntimeMessage<ActiveDetectionResponse>({
@@ -32,64 +38,56 @@ export async function reanalyzeActiveDetection(tabId?: number) {
 }
 
 export async function saveDetection(payload: SaveDetectionInput) {
-  return sendRuntimeMessage<SaveDetectionResponse>({
-    type: 'watchlog/save-detection',
-    payload,
-  } satisfies WatchLogMessage)
+  return repository.saveDetection(payload) as Promise<SaveDetectionResponse>
 }
 
 export async function addFromExplorer(metadataId: string, listId: string) {
-  return sendRuntimeMessage<SaveDetectionResponse>({
-    type: 'watchlog/add-from-explorer',
-    payload: { metadataId, listId },
-  } satisfies WatchLogMessage)
+  const item = await metadataProvider.getById(metadataId)
+
+  if (!item) {
+    throw new Error('Explorer item not found.')
+  }
+
+  return repository.addFromMetadata(item, listId) as Promise<SaveDetectionResponse>
 }
 
 export async function getLibrary() {
-  return sendRuntimeMessage<LibraryResponse>({
-    type: 'watchlog/get-library',
-  } satisfies WatchLogMessage)
+  return {
+    snapshot: await repository.getSnapshot(),
+  } satisfies LibraryResponse
 }
 
 export async function getExplorer(query?: string) {
-  return sendRuntimeMessage<ExplorerResponse>({
-    type: 'watchlog/get-explorer',
-    payload: { query },
-  } satisfies WatchLogMessage)
+  return {
+    items: await repository.getExplorer(query),
+  } satisfies ExplorerResponse
 }
 
 export async function updateEntry(payload: UpdateEntryInput) {
-  return sendRuntimeMessage<UpdateEntryResponse>({
-    type: 'watchlog/update-entry',
-    payload,
-  } satisfies WatchLogMessage)
+  return repository.updateEntry(payload) as Promise<UpdateEntryResponse>
 }
 
 export async function addList(label: string) {
-  return sendRuntimeMessage<AddListResponse>({
-    type: 'watchlog/add-list',
-    payload: { label },
-  } satisfies WatchLogMessage)
+  return repository.addList(label) as Promise<AddListResponse>
 }
 
 export async function exportCatalog() {
-  return sendRuntimeMessage<ExportCatalogResponse>({
-    type: 'watchlog/export-catalog',
-  } satisfies WatchLogMessage)
+  return {
+    payload: await repository.exportCatalog(),
+  } satisfies ExportCatalogResponse
 }
 
 export async function exportActivity() {
-  return sendRuntimeMessage<ExportActivityResponse>({
-    type: 'watchlog/export-activity',
-  } satisfies WatchLogMessage)
+  return {
+    payload: await repository.exportActivity(),
+  } satisfies ExportActivityResponse
 }
 
 export async function importBackup(
   catalog: ExportCatalogPayload,
   activity: ExportActivityPayload,
 ) {
-  return sendRuntimeMessage<LibraryResponse>({
-    type: 'watchlog/import-backup',
-    payload: { catalog, activity },
-  } satisfies WatchLogMessage)
+  return {
+    snapshot: await repository.importBackup(catalog, activity),
+  } satisfies LibraryResponse
 }

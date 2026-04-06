@@ -25,7 +25,12 @@ export async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
 }
 
 export async function sendRuntimeMessage<TResponse>(message: unknown): Promise<TResponse> {
+  console.log('[WatchLog] runtime:send', message)
   const response = await chrome.runtime.sendMessage(message)
+  console.log('[WatchLog] runtime:response', {
+    message,
+    response,
+  })
 
   if (
     response &&
@@ -33,6 +38,10 @@ export async function sendRuntimeMessage<TResponse>(message: unknown): Promise<T
     'error' in response &&
     typeof response.error === 'string'
   ) {
+    console.error('[WatchLog] runtime:error-response', {
+      message,
+      response,
+    })
     throw new Error(response.error)
   }
 

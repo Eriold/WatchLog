@@ -60,3 +60,22 @@ export function formatLocalizedDate(value: string, locale: I18nValue['locale']):
     day: 'numeric',
   }).format(new Date(value))
 }
+
+export function getSortedLocalizedLists(
+  lists: WatchListDefinition[],
+  locale: I18nValue['locale'],
+  t: Translator,
+): WatchListDefinition[] {
+  const languageTag = locale === 'es' ? 'es-CO' : 'en-US'
+  const collator = new Intl.Collator(languageTag, {
+    sensitivity: 'base',
+    numeric: true,
+  })
+
+  return [...lists].sort((left, right) => {
+    return collator.compare(
+      getLocalizedListDefinitionLabel(left, t),
+      getLocalizedListDefinitionLabel(right, t),
+    )
+  })
+}
