@@ -500,12 +500,10 @@ export function PopupApp() {
   }
 
   async function openSidePanel(): Promise<void> {
-    const tab = await getPopupTargetTab()
-
-    if (tab?.windowId !== undefined) {
-      await chrome.sidePanel.open({ windowId: tab.windowId })
-      window.close()
-    }
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL('library.html'),
+    })
+    window.close()
   }
 
   const recentEntries = toLibraryEntries(snapshot).slice(0, 3)

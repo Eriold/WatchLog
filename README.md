@@ -10,7 +10,7 @@ WatchLog is a Manifest V3 browser extension for tracking what the user is watchi
 
 ## Surfaces
 - `popup.html`: quick capture and save flow
-- `sidepanel.html`: main library workspace
+- `library.html`: main library workspace
 - `options.html`: import/export and roadmap settings
 - `src/background/index.ts`: message router and repository host
 - `src/content/index.ts`: in-page detection runner

@@ -28,7 +28,7 @@ export default defineManifest({
   },
   options_page: 'options.html',
   side_panel: {
-    default_path: 'sidepanel.html',
+    default_path: 'library.html',
   },
   permissions: ['storage', 'tabs', 'activeTab', 'sidePanel', 'scripting'],
   host_permissions: ['<all_urls>'],

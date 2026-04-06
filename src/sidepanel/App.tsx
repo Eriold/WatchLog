@@ -1,136 +1,159 @@
 import { startTransition, useEffect, useState } from 'react'
-import {
-  addFromExplorer,
-  addList,
-  getExplorer,
-  getLibrary,
-  updateEntry,
-} from '../shared/client'
+import { addFromExplorer, addList, getExplorer, getLibrary, updateEntry } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
 import { getListLabel, toLibraryEntries } from '../shared/selectors'
-import type { MetadataCard, WatchLogSnapshot } from '../shared/types'
+import { getTemporaryPoster } from '../shared/mock-posters'
+import type { LibraryEntry, MetadataCard, WatchLogSnapshot } from '../shared/types'
 import './sidepanel.css'
 
+const LIBRARY_VIEW_ID = 'library'
+const FAVORITES_VIEW_ID = 'favorites'
+
 function getInitialSnapshot(): WatchLogSnapshot {
-  return {
-    catalog: [],
-    activity: [],
-    lists: [],
+  return { catalog: [], activity: [], lists: [] }
+}
+
+function getViewCount(viewId: string, entries: LibraryEntry[], explorerItems: MetadataCard[]): number {
+  if (viewId === LIBRARY_VIEW_ID) return entries.length
+  if (viewId === FAVORITES_VIEW_ID) return entries.filter((entry) => entry.activity.favorite).length
+  if (viewId === EXPLORER_TAB_ID) return explorerItems.length
+  return entries.filter((entry) => entry.activity.status === viewId).length
+}
+
+function getViewTitle(viewId: string, snapshot: WatchLogSnapshot): string {
+  if (viewId === LIBRARY_VIEW_ID) return 'Library'
+  if (viewId === FAVORITES_VIEW_ID) return 'Favorites'
+  if (viewId === EXPLORER_TAB_ID) return 'Explorer'
+  return getListLabel(snapshot.lists, viewId)
+}
+
+function getViewDescription(viewId: string): string {
+  if (viewId === LIBRARY_VIEW_ID) {
+    return 'Browse every saved title, resume fast and keep the full catalog in one place.'
   }
+  if (viewId === 'watching') {
+    return 'Continue active sessions and jump back into the latest source.'
+  }
+  if (viewId === 'completed') {
+    return 'Archive finished titles without losing history or notes.'
+  }
+  if (viewId === FAVORITES_VIEW_ID) {
+    return 'Highlight the entries you want to keep closest.'
+  }
+  if (viewId === EXPLORER_TAB_ID) {
+    return 'Seed the library with temporary API-like cards before real providers land.'
+  }
+  return 'Review the queue, update progress and manage your saved titles.'
+}
+
+function getMediaTypeLabel(mediaType: string): string {
+  const labels: Record<string, string> = {
+    movie: 'Movie',
+    series: 'Series',
+    anime: 'Anime',
+    manga: 'Manga',
+    novel: 'Novel',
+    video: 'Video',
+  }
+
+  return labels[mediaType] ?? 'Unknown'
+}
+
+function getProgressPercent(entry: LibraryEntry): number {
+  const progress = entry.activity.currentProgress
+  if (progress.episode !== undefined && progress.episodeTotal && progress.episodeTotal > 0) {
+    return Math.min(100, Math.max(0, Math.round((progress.episode / progress.episodeTotal) * 100)))
+  }
+  if (progress.chapter !== undefined && progress.chapterTotal && progress.chapterTotal > 0) {
+    return Math.min(100, Math.max(0, Math.round((progress.chapter / progress.chapterTotal) * 100)))
+  }
+  const percentMatch = progress.progressText.match(/(\d{1,3})\s*%/)
+  if (percentMatch) {
+    return Math.min(100, Math.max(0, Number.parseInt(percentMatch[1], 10)))
+  }
+  return entry.activity.status === 'completed' ? 100 : 0
+}
+
+function getStatusTone(status: string, favorite: boolean): string {
+  if (favorite) return 'favorite'
+  if (status === 'watching') return 'watching'
+  if (status === 'completed') return 'completed'
+  if (status === 'paused') return 'paused'
+  if (status === 'planned') return 'planned'
+  return 'default'
 }
 
 export function SidePanelApp() {
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
-  const [selectedListId, setSelectedListId] = useState('watching')
+  const [selectedViewId, setSelectedViewId] = useState(LIBRARY_VIEW_ID)
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
+  const [libraryQuery, setLibraryQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('recent')
   const [explorerQuery, setExplorerQuery] = useState('')
   const [explorerItems, setExplorerItems] = useState<MetadataCard[]>([])
   const [newListLabel, setNewListLabel] = useState('')
-  const [drafts, setDrafts] = useState<
-    Record<
-      string,
-      {
-        notes: string
-        progressText: string
-        listId: string
-        favorite: boolean
-      }
-    >
-  >({})
+  const [drafts, setDrafts] = useState<Record<string, { notes: string; progressText: string; listId: string; favorite: boolean }>>({})
   const [statusMessage, setStatusMessage] = useState('Loading WatchLog library...')
-
-  async function handleAddList(): Promise<void> {
-    if (!newListLabel.trim()) {
-      return
-    }
-
-    const response = await addList(newListLabel)
-    setSnapshot(response.snapshot)
-    setNewListLabel('')
-    setStatusMessage(`List "${response.list.label}" created.`)
-  }
-
-  async function handleSaveEntry(): Promise<void> {
-    if (!selectedEntry) {
-      return
-    }
-
-    const draft = selectedDraft
-    if (!draft) {
-      return
-    }
-
-    const response = await updateEntry({
-      catalogId: selectedEntry.catalog.id,
-      listId: draft.listId,
-      favorite: draft.favorite,
-      manualNotes: draft.notes,
-      progress: {
-        progressText: draft.progressText,
-      },
-    })
-
-    setSnapshot(response.snapshot)
-    setDrafts((current) => {
-      const next = { ...current }
-      delete next[selectedEntry.catalog.id]
-      return next
-    })
-    setStatusMessage('Entry updated.')
-  }
-
-  async function handleExplorerAdd(item: MetadataCard): Promise<void> {
-    const response = await addFromExplorer(item.id, 'planned')
-    setSnapshot(response.snapshot)
-    setSelectedListId('planned')
-    setSelectedCatalogId(response.entry.catalog.id)
-    setStatusMessage(`${item.title} added to Por ver.`)
-  }
 
   useEffect(() => {
     let cancelled = false
-
     const load = async () => {
-      const [libraryResponse, explorerResponse] = await Promise.all([
-        getLibrary(),
-        getExplorer(),
-      ])
-
-      if (cancelled) {
-        return
-      }
-
+      const [libraryResponse, explorerResponse] = await Promise.all([getLibrary(), getExplorer()])
+      if (cancelled) return
       startTransition(() => {
         setSnapshot(libraryResponse.snapshot)
         setExplorerItems(explorerResponse.items)
         setStatusMessage('Library ready.')
       })
     }
-
     void load()
-
     return () => {
       cancelled = true
     }
   }, [])
 
   const entries = toLibraryEntries(snapshot)
-  const visibleEntries = entries.filter((entry) => {
-    if (selectedListId === EXPLORER_TAB_ID) {
-      return false
-    }
-
-    return entry.activity.status === selectedListId
+  const primaryViews = [
+    { id: LIBRARY_VIEW_ID, label: 'Library', icon: 'LB' },
+    { id: 'watching', label: 'Watching', icon: 'PL' },
+    { id: 'completed', label: 'Finished', icon: 'OK' },
+    { id: FAVORITES_VIEW_ID, label: 'Favorites', icon: 'FV' },
+    { id: EXPLORER_TAB_ID, label: 'Explorer', icon: 'EX' },
+  ]
+  const queueLists = snapshot.lists.filter((list) => !['watching', 'completed'].includes(list.id))
+  const baseEntries = entries.filter((entry) => {
+    if (selectedViewId === LIBRARY_VIEW_ID) return true
+    if (selectedViewId === FAVORITES_VIEW_ID) return entry.activity.favorite
+    if (selectedViewId === EXPLORER_TAB_ID) return false
+    return entry.activity.status === selectedViewId
   })
 
-  const effectiveSelectedCatalogId = visibleEntries.some(
-    (entry) => entry.catalog.id === selectedCatalogId,
-  )
-    ? selectedCatalogId
-    : visibleEntries[0]?.catalog.id ?? null
+  const filteredEntries = baseEntries
+    .filter((entry) => {
+      const normalizedQuery = libraryQuery.toLowerCase()
+      const matchesQuery =
+        !normalizedQuery ||
+        entry.catalog.title.toLowerCase().includes(normalizedQuery) ||
+        entry.catalog.genres.some((genre) => genre.toLowerCase().includes(normalizedQuery)) ||
+        (entry.activity.lastSource?.siteName ?? '').toLowerCase().includes(normalizedQuery)
+      const matchesType = typeFilter === 'all' || entry.catalog.mediaType === typeFilter
+      const matchesSource =
+        sourceFilter === 'all' || (entry.activity.lastSource?.siteName ?? 'Unknown') === sourceFilter
+      return matchesQuery && matchesType && matchesSource
+    })
+    .sort((left, right) => {
+      if (sortBy === 'title') return left.catalog.title.localeCompare(right.catalog.title)
+      if (sortBy === 'progress') return getProgressPercent(right) - getProgressPercent(left)
+      return new Date(right.activity.updatedAt).getTime() - new Date(left.activity.updatedAt).getTime()
+    })
 
   const selectedEntry =
-    entries.find((entry) => entry.catalog.id === effectiveSelectedCatalogId) ?? null
+    entries.find((entry) =>
+      filteredEntries.some((candidate) => candidate.catalog.id === (selectedCatalogId ?? filteredEntries[0]?.catalog.id)) &&
+      entry.catalog.id === (selectedCatalogId ?? filteredEntries[0]?.catalog.id),
+    ) ?? null
 
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? {
@@ -141,322 +164,343 @@ export function SidePanelApp() {
       }
     : null
 
-  function updateDraft(
-    patch: Partial<{
-      notes: string
-      progressText: string
-      listId: string
-      favorite: boolean
-    }>,
-  ): void {
-    if (!selectedEntry || !selectedDraft) {
-      return
-    }
+  const typeOptions = Array.from(new Set(entries.map((entry) => entry.catalog.mediaType))).sort()
+  const sourceOptions = Array.from(new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown'))).sort()
 
+  function updateDraft(patch: Partial<{ notes: string; progressText: string; listId: string; favorite: boolean }>): void {
+    if (!selectedEntry || !selectedDraft) return
     setDrafts((current) => ({
       ...current,
-      [selectedEntry.catalog.id]: {
-        ...selectedDraft,
-        ...patch,
-      },
+      [selectedEntry.catalog.id]: { ...selectedDraft, ...patch },
     }))
   }
 
-  const listButtons = [
-    ...snapshot.lists,
-    { id: EXPLORER_TAB_ID, label: 'Explorer', kind: 'system' as const },
-  ]
+  async function handleAddList(): Promise<void> {
+    if (!newListLabel.trim()) return
+    const response = await addList(newListLabel)
+    setSnapshot(response.snapshot)
+    setNewListLabel('')
+    setStatusMessage(`List "${response.list.label}" created.`)
+  }
+
+  async function handleSaveEntry(): Promise<void> {
+    if (!selectedEntry || !selectedDraft) return
+    const response = await updateEntry({
+      catalogId: selectedEntry.catalog.id,
+      listId: selectedDraft.listId,
+      favorite: selectedDraft.favorite,
+      manualNotes: selectedDraft.notes,
+      progress: { progressText: selectedDraft.progressText },
+    })
+    setSnapshot(response.snapshot)
+    setStatusMessage('Entry updated.')
+  }
+
+  async function handleExplorerSearch(): Promise<void> {
+    const response = await getExplorer(explorerQuery)
+    setExplorerItems(response.items)
+    setStatusMessage('Explorer refreshed.')
+  }
+
+  async function handleExplorerAdd(item: MetadataCard): Promise<void> {
+    const response = await addFromExplorer(item.id, 'planned')
+    setSnapshot(response.snapshot)
+    setSelectedViewId(LIBRARY_VIEW_ID)
+    setSelectedCatalogId(response.entry.catalog.id)
+    setStatusMessage(`${item.title} added to Por ver.`)
+  }
 
   return (
-    <div className="app-shell sidepanel-shell">
-      <div className="sidepanel-layout">
-        <aside className="panel sidebar">
-          <div className="brand-lockup">
+    <div className="sidepanel-shell library-shell">
+      <aside className="library-sidebar">
+        <div className="library-brand">
+          <div className="library-brand-mark">
             <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
-            <p className="tiny">WatchLog</p>
           </div>
-          <h1 className="section-title">Your queues</h1>
-          <p className="muted">
-            Track where you left off and re-open the latest source with one click.
-          </p>
-
-          <div className="nav-list">
-            {listButtons.map((list) => {
-              const count =
-                list.id === EXPLORER_TAB_ID
-                  ? explorerItems.length
-                  : entries.filter((entry) => entry.activity.status === list.id).length
-
-              return (
-                <button
-                  key={list.id}
-                  className={`nav-button ${selectedListId === list.id ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setSelectedListId(list.id)}
-                >
-                  <strong>{list.label}</strong>
-                  <div className="tiny">{count} items</div>
-                </button>
-              )
-            })}
+          <div>
+            <h1 className="library-brand-title">WatchLog</h1>
+            <p className="library-brand-status">Status: Local-first</p>
           </div>
+        </div>
 
-          <div className="stack" style={{ marginTop: 16 }}>
-            <div>
-              <label className="label" htmlFor="new-list">
-                Create custom list
-              </label>
-              <input
-                id="new-list"
-                className="field"
-                value={newListLabel}
-                placeholder="Weekend binge"
-                onChange={(event) => setNewListLabel(event.target.value)}
-              />
-            </div>
-            <button className="button secondary" type="button" onClick={handleAddList}>
-              Add list
+        <nav className="library-nav">
+          {primaryViews.map((view) => (
+            <button
+              key={view.id}
+              className={`library-nav-button ${selectedViewId === view.id ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setSelectedViewId(view.id)}
+            >
+              <span className="library-nav-icon">{view.icon}</span>
+              <span className="library-nav-copy">
+                <strong>{view.label}</strong>
+                <span>{getViewCount(view.id, entries, explorerItems)} items</span>
+              </span>
             </button>
+          ))}
+        </nav>
+
+        <div className="library-sidebar-section">
+          <p className="library-sidebar-label">Queues</p>
+          <div className="library-queue-list">
+            {queueLists.map((list) => (
+              <button
+                key={list.id}
+                className={`queue-chip ${selectedViewId === list.id ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => setSelectedViewId(list.id)}
+              >
+                {list.label}
+              </button>
+            ))}
           </div>
-        </aside>
+        </div>
 
-        <main className="panel content">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div className="brand-lockup">
-                <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
-                <p className="tiny">Workspace</p>
-              </div>
-              <h2 className="section-title">
-                {selectedListId === EXPLORER_TAB_ID
-                  ? 'Explorer mock catalog'
-                  : getListLabel(snapshot.lists, selectedListId)}
-              </h2>
-            </div>
-            <span className="chip">{statusMessage}</span>
+        <div className="library-sidebar-section">
+          <p className="library-sidebar-label">Create list</p>
+          <input
+            className="field"
+            value={newListLabel}
+            placeholder="Weekend binge"
+            onChange={(event) => setNewListLabel(event.target.value)}
+          />
+          <button className="button secondary" type="button" onClick={handleAddList}>
+            Add list
+          </button>
+        </div>
+
+        <button className="library-settings-button" type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
+          Settings
+        </button>
+      </aside>
+
+      <div className="library-main">
+        <header className="library-topbar">
+          <div>
+            <h2 className="library-topbar-title">WatchLog Library</h2>
+            <p className="library-topbar-subtitle">{getViewDescription(selectedViewId)}</p>
           </div>
+          <div className="library-topbar-actions">
+            <label className="library-search">
+              <span>Search</span>
+              <input
+                value={selectedViewId === EXPLORER_TAB_ID ? explorerQuery : libraryQuery}
+                placeholder={selectedViewId === EXPLORER_TAB_ID ? 'Scan explorer...' : 'Scan library...'}
+                onChange={(event) =>
+                  selectedViewId === EXPLORER_TAB_ID
+                    ? setExplorerQuery(event.target.value)
+                    : setLibraryQuery(event.target.value)
+                }
+              />
+            </label>
+            {selectedViewId === EXPLORER_TAB_ID ? (
+              <button className="library-chip-button" type="button" onClick={() => void handleExplorerSearch()}>
+                Search
+              </button>
+            ) : (
+              <span className="library-status-chip">{statusMessage}</span>
+            )}
+          </div>
+        </header>
 
-          {selectedListId === EXPLORER_TAB_ID ? (
-            <div className="stack" style={{ marginTop: 16 }}>
-              <div className="row">
-                <input
-                  className="field"
-                  value={explorerQuery}
-                  placeholder="Search mock catalog"
-                  onChange={(event) => setExplorerQuery(event.target.value)}
-                />
-                <button
-                    className="button secondary"
-                    type="button"
-                    onClick={() =>
-                      void getExplorer(explorerQuery).then((response) => {
-                        setExplorerItems(response.items)
-                      })
-                    }
-                >
-                  Search
-                </button>
-              </div>
+        <main className="library-content">
+          <section className="library-filter-bar">
+            <div className="library-filter-group">
+              <span className="library-filter-chip is-static">{getViewTitle(selectedViewId, snapshot)}</span>
+              {selectedViewId !== EXPLORER_TAB_ID ? (
+                <>
+                  <label className="library-filter-chip">
+                    <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                      <option value="all">Type: All</option>
+                      {typeOptions.map((mediaType) => (
+                        <option key={mediaType} value={mediaType}>
+                          {`Type: ${getMediaTypeLabel(mediaType)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="library-filter-chip">
+                    <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                      <option value="all">Platform: Any</option>
+                      {sourceOptions.map((source) => (
+                        <option key={source} value={source}>
+                          {`Platform: ${source}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : null}
+            </div>
 
-              <div className="entry-grid">
-                {explorerItems.map((item) => (
-                  <article className="explorer-card" key={item.id}>
-                    {item.poster ? (
-                      <img className="explorer-poster" src={item.poster} alt={item.title} />
-                    ) : null}
-                    <div className="explorer-body">
-                      <h3 className="entry-title">{item.title}</h3>
-                      <div className="entry-meta">
-                        {item.score ? <span className="chip">Score {item.score}</span> : null}
-                        <span className="chip">{item.mediaType}</span>
-                      </div>
-                      <p className="tiny">{item.genres.join(' · ')}</p>
-                      <p className="muted">{item.description}</p>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => void handleExplorerAdd(item)}
-                      >
-                        Add to Por ver
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+            <div className="library-filter-group">
+              {selectedViewId !== EXPLORER_TAB_ID ? (
+                <label className="library-filter-chip">
+                  <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                    <option value="recent">Sort: Recents</option>
+                    <option value="title">Sort: Title</option>
+                    <option value="progress">Sort: Progress</option>
+                  </select>
+                </label>
+              ) : null}
+              <span className="library-status-chip">
+                {selectedViewId === EXPLORER_TAB_ID ? `${explorerItems.length} explorer cards` : `${filteredEntries.length} visible items`}
+              </span>
             </div>
-          ) : visibleEntries.length === 0 ? (
-            <div className="stack" style={{ marginTop: 24 }}>
-              <span className="chip">This list is empty.</span>
-              <p className="muted">
-                Save something from the popup or use Explorer to seed your library.
-              </p>
-            </div>
-          ) : (
-            <div className="entry-grid">
-              {visibleEntries.map((entry) => (
-                <article
-                  className="entry-card"
-                  key={entry.catalog.id}
-                  onClick={() => setSelectedCatalogId(entry.catalog.id)}
-                  style={{
-                    outline:
-                      selectedCatalogId === entry.catalog.id
-                        ? '2px solid rgba(167, 139, 250, 0.65)'
-                        : 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {entry.catalog.poster ? (
-                    <img
-                      className="entry-poster"
-                      src={entry.catalog.poster}
-                      alt={entry.catalog.title}
-                    />
-                  ) : null}
-                  <div className="entry-body">
-                    <h3 className="entry-title">{entry.catalog.title}</h3>
-                    <div className="entry-meta">
-                      <span className="chip">{entry.activity.currentProgress.progressText}</span>
-                      {entry.activity.favorite ? <span className="chip">Favorite</span> : null}
+          </section>
+
+          {selectedViewId === EXPLORER_TAB_ID ? (
+            <section className="library-grid">
+              {explorerItems.map((item) => (
+                <article className="library-card explorer-card" key={item.id}>
+                  <div className="library-card-poster-wrap">
+                    <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
+                    <span className="library-card-overlay" />
+                    <div className="library-card-badges">
+                      <span className="media-badge tone-default">{getMediaTypeLabel(item.mediaType)}</span>
                     </div>
-                    <div className="tiny">{entry.activity.lastSource?.siteName ?? 'Manual entry'}</div>
-                    <div className="tiny">{entry.catalog.genres.join(' · ')}</div>
+                  </div>
+                  <div className="library-card-body">
+                    <div>
+                      <h3 className="library-card-title">{item.title}</h3>
+                      <p className="library-card-source">Mock catalog</p>
+                    </div>
+                    <div className="genre-row">
+                      {item.genres.slice(0, 3).map((genre) => (
+                        <span className="genre-chip" key={genre}>{genre}</span>
+                      ))}
+                    </div>
+                    <p className="library-card-description">{item.description}</p>
+                    <button className="button" type="button" onClick={() => void handleExplorerAdd(item)}>
+                      Add to Por ver
+                    </button>
                   </div>
                 </article>
               ))}
-            </div>
+            </section>
+          ) : filteredEntries.length === 0 ? (
+            <section className="library-empty-state panel">
+              <h3>No titles matched this view.</h3>
+              <p>Save something from the popup, change the filters or add a mock card from Explorer.</p>
+            </section>
+          ) : (
+            <>
+              <section className="library-grid">
+                {filteredEntries.map((entry) => {
+                  const tone = getStatusTone(entry.activity.status, entry.activity.favorite)
+                  const progress = getProgressPercent(entry)
+                  const platform = entry.activity.lastSource?.siteName ?? 'Manual entry'
+
+                  return (
+                    <article
+                      key={entry.catalog.id}
+                      className={`library-card ${selectedEntry?.catalog.id === entry.catalog.id ? 'is-selected' : ''}`}
+                      onClick={() => setSelectedCatalogId(entry.catalog.id)}
+                    >
+                      <div className="library-card-poster-wrap">
+                        <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
+                        <span className="library-card-overlay" />
+                        <div className="library-card-badges">
+                          <span className={`media-badge tone-${tone}`}>{getMediaTypeLabel(entry.catalog.mediaType)}</span>
+                          {entry.activity.favorite ? <span className="favorite-badge">Favorite</span> : null}
+                        </div>
+                        <div className="library-card-progress">
+                          <div className="library-card-progress-copy">
+                            <span>{entry.activity.status === 'completed' ? 'Completed' : 'Active track'}</span>
+                            <span>{progress > 0 ? `${progress}%` : entry.activity.currentProgress.progressText}</span>
+                          </div>
+                          <div className="library-card-progress-track">
+                            <div className="library-card-progress-value" style={{ width: `${progress}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="library-card-body">
+                        <div>
+                          <h3 className="library-card-title">{entry.catalog.title}</h3>
+                          <p className="library-card-source">{platform}</p>
+                        </div>
+                        <div className="genre-row">
+                          {(entry.catalog.genres.length > 0 ? entry.catalog.genres : [getListLabel(snapshot.lists, entry.activity.status)])
+                            .slice(0, 3)
+                            .map((token) => (
+                              <span className="genre-chip" key={token}>{token}</span>
+                            ))}
+                        </div>
+                        <p className="library-card-description">{entry.activity.currentProgress.progressText}</p>
+                      </div>
+                    </article>
+                  )
+                })}
+              </section>
+
+              {selectedEntry && selectedDraft ? (
+                <section className="panel library-detail-panel">
+                  <div className="library-detail-head">
+                    <div>
+                      <p className="library-detail-kicker">Focused detail</p>
+                      <h3 className="library-detail-title">{selectedEntry.catalog.title}</h3>
+                      <p className="library-detail-copy">{selectedEntry.catalog.description ?? 'No metadata yet.'}</p>
+                    </div>
+                    <div className="library-detail-pill-row">
+                      <span className="library-status-chip">{getMediaTypeLabel(selectedEntry.catalog.mediaType)}</span>
+                      <span className="library-status-chip">{selectedEntry.activity.currentProgress.progressText}</span>
+                    </div>
+                  </div>
+
+                  <div className="library-detail-grid">
+                    <div className="field-card">
+                      <label className="label" htmlFor="entry-list">Primary list</label>
+                      <select id="entry-list" className="select" value={selectedDraft.listId} onChange={(event) => updateDraft({ listId: event.target.value })}>
+                        {snapshot.lists.map((list) => (
+                          <option key={list.id} value={list.id}>{list.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-card">
+                      <label className="label" htmlFor="entry-progress">Progress label</label>
+                      <input id="entry-progress" className="field" value={selectedDraft.progressText} onChange={(event) => updateDraft({ progressText: event.target.value })} />
+                    </div>
+                    <div className="field-card field-card-wide">
+                      <label className="label" htmlFor="entry-notes">Notes</label>
+                      <textarea id="entry-notes" className="textarea" value={selectedDraft.notes} onChange={(event) => updateDraft({ notes: event.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="library-detail-actions">
+                    <button className="button" type="button" onClick={handleSaveEntry}>Save changes</button>
+                    {selectedEntry.activity.lastSource?.url ? (
+                      <a className="button secondary" href={selectedEntry.activity.lastSource.url} rel="noreferrer" target="_blank">
+                        Resume source
+                      </a>
+                    ) : null}
+                    <button
+                      className={`favorite-toggle-chip ${selectedDraft.favorite ? 'is-active' : ''}`}
+                      type="button"
+                      onClick={() => updateDraft({ favorite: !selectedDraft.favorite })}
+                    >
+                      {selectedDraft.favorite ? 'Favorite enabled' : 'Mark as favorite'}
+                    </button>
+                  </div>
+
+                  <div className="history-table">
+                    {selectedEntry.activity.sourceHistory.map((source) => (
+                      <a key={source.id} className="history-row" href={source.url || '#'} rel="noreferrer" target="_blank">
+                        <div className="history-site">
+                          {source.favicon ? <img src={source.favicon} alt="" /> : null}
+                          <div>
+                            <strong>{source.siteName}</strong>
+                            <span>{source.progressText}</span>
+                          </div>
+                        </div>
+                        <span className="history-date">{new Date(source.detectedAt).toLocaleDateString()}</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </>
           )}
         </main>
-
-        <aside className="panel detail">
-          {selectedEntry ? (
-            <div className="stack">
-              <div>
-                <p className="tiny">Detail</p>
-                <h2 className="section-title">{selectedEntry.catalog.title}</h2>
-                <p className="muted">{selectedEntry.catalog.description ?? 'No metadata yet.'}</p>
-              </div>
-
-              <div className="row">
-                <span className="chip">{selectedEntry.catalog.mediaType}</span>
-                {selectedEntry.catalog.releaseYear ? (
-                  <span className="chip">{selectedEntry.catalog.releaseYear}</span>
-                ) : null}
-                <span className="chip">{selectedEntry.activity.currentProgress.progressText}</span>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="entry-list">
-                  Primary list
-                </label>
-                <select
-                  id="entry-list"
-                  className="select"
-                  value={selectedDraft?.listId ?? selectedEntry.activity.status}
-                  onChange={(event) => updateDraft({ listId: event.target.value })}
-                >
-                  {snapshot.lists.map((list) => (
-                    <option key={list.id} value={list.id}>
-                      {list.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="entry-progress">
-                  Progress label
-                </label>
-                <input
-                  id="entry-progress"
-                  className="field"
-                  value={selectedDraft?.progressText ?? selectedEntry.activity.currentProgress.progressText}
-                  onChange={(event) => updateDraft({ progressText: event.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="entry-notes">
-                  Notes
-                </label>
-                <textarea
-                  id="entry-notes"
-                  className="textarea"
-                  value={selectedDraft?.notes ?? selectedEntry.activity.manualNotes}
-                  onChange={(event) => updateDraft({ notes: event.target.value })}
-                />
-              </div>
-
-              <label className="chip" htmlFor="detail-favorite">
-                <input
-                  id="detail-favorite"
-                  type="checkbox"
-                  checked={selectedDraft?.favorite ?? selectedEntry.activity.favorite}
-                  onChange={(event) => updateDraft({ favorite: event.target.checked })}
-                />
-                Mark as favorite
-              </label>
-
-              <div className="sticky-actions">
-                <button className="button" type="button" onClick={handleSaveEntry}>
-                  Save changes
-                </button>
-                {selectedEntry.activity.lastSource?.url ? (
-                  <a
-                    className="button secondary"
-                    href={selectedEntry.activity.lastSource.url}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Resume from last source
-                  </a>
-                ) : null}
-              </div>
-
-              <div>
-                <p className="tiny">Source history</p>
-                <table className="detail-history">
-                  <thead>
-                    <tr>
-                      <th>Site</th>
-                      <th>Progress</th>
-                      <th>Visited</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedEntry.activity.sourceHistory.map((source) => (
-                      <tr key={source.id}>
-                        <td>
-                          <a
-                            className="history-site"
-                            href={source.url || '#'}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            {source.favicon ? <img src={source.favicon} alt="" /> : null}
-                            <span>{source.siteName}</span>
-                          </a>
-                        </td>
-                        <td>{source.progressText}</td>
-                        <td className="tiny">
-                          {new Date(source.detectedAt).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="stack">
-              <p className="tiny">Detail</p>
-              <h2 className="section-title">No item selected</h2>
-              <p className="muted">
-                Pick an entry from the current list or seed something from Explorer.
-              </p>
-            </div>
-          )}
-        </aside>
       </div>
     </div>
   )
