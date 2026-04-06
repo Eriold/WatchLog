@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { getActiveDetection, getLibrary, saveDetection } from '../shared/client'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
 import { toLibraryEntries } from '../shared/selectors'
-import type { DetectionResult, LibraryEntry, WatchLogSnapshot } from '../shared/types'
+import { storageGet } from '../shared/storage/browser'
+import type {
+  DetectionResult,
+  LibraryEntry,
+  WatchListDefinition,
+  WatchLogSnapshot,
+} from '../shared/types'
 import type { DetectionDebugInfo } from '../shared/messages'
 import {
   cleanTitle,
@@ -38,6 +44,39 @@ function getEmptyDebug(): DetectionDebugInfo {
     tabUrl: null,
     source: 'none',
   }
+}
+
+function mergePopupLists(lists: WatchListDefinition[]): WatchListDefinition[] {
+  const map = new Map<string, WatchListDefinition>()
+
+  for (const list of SYSTEM_LISTS) {
+    map.set(list.id, { ...list })
+  }
+
+  for (const list of lists) {
+    if (!map.has(list.id)) {
+      map.set(list.id, list)
+    }
+  }
+
+  return Array.from(map.values())
+}
+
+function buildPopupListOptions(
+  snapshotLists: WatchListDefinition[],
+  storedLists: WatchListDefinition[],
+): WatchListDefinition[] {
+  return mergePopupLists([...snapshotLists, ...storedLists])
+}
+
+async function readPopupLists(): Promise<WatchListDefinition[]> {
+  const stored = await storageGet<WatchListDefinition[]>(
+    chrome.storage.local,
+    STORAGE_KEYS.lists,
+    [],
+  )
+
+  return mergePopupLists(stored)
 }
 
 async function getPopupTargetTab(): Promise<chrome.tabs.Tab | null> {
@@ -327,7 +366,8 @@ export function PopupApp() {
   const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [debug, setDebug] = useState<DetectionDebugInfo>(getEmptyDebug)
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
-  const [selectedList, setSelectedList] = useState('watching')
+  const [listOptions, setListOptions] = useState<WatchListDefinition[]>(() => mergePopupLists([]))
+  const [selectedList, setSelectedList] = useState('library')
   const [favorite, setFavorite] = useState(false)
   const [messageState, setMessageState] = useState<{
     key:
@@ -415,39 +455,57 @@ export function PopupApp() {
   useEffect(() => {
     let cancelled = false
 
-    async function loadPopupData(): Promise<void> {
-      const [detectionResult, libraryResult] = await Promise.allSettled([
-        loadDetection(false),
-        getLibrary(),
-      ])
+    void getLibrary()
+      .then((response) => {
+        if (cancelled) {
+          return
+        }
 
-      if (cancelled) {
-        return
-      }
+        setSnapshot(response.snapshot)
+        setListOptions((current) => buildPopupListOptions(response.snapshot.lists, current))
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
 
-      const activeDetection =
-        detectionResult.status === 'fulfilled' ? detectionResult.value : null
-
-      if (libraryResult.status === 'fulfilled') {
-        setSnapshot(libraryResult.value.snapshot)
-      }
-
-      setDetection(activeDetection)
-
-      if (activeDetection) {
-        setMessageState({ key: 'popup.suggestionReady' })
-        return
-      }
-
-      if (detectionResult.status === 'rejected' || libraryResult.status === 'rejected') {
         setMessageState({ key: 'popup.analyzeFailed' })
-        return
-      }
+      })
 
-      setMessageState({ key: 'popup.noSupportedMedia' })
-    }
+    void readPopupLists()
+      .then((lists) => {
+        if (cancelled) {
+          return
+        }
 
-    void loadPopupData()
+        setListOptions(lists)
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+
+        setListOptions(mergePopupLists([]))
+      })
+
+    void loadDetection(false)
+      .then((activeDetection) => {
+        if (cancelled) {
+          return
+        }
+
+        setDetection(activeDetection)
+        setMessageState({
+          key: activeDetection ? 'popup.suggestionReady' : 'popup.noSupportedMedia',
+        })
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+
+        setMessageState({ key: 'popup.analyzeFailed' })
+      })
 
     return () => {
       cancelled = true
@@ -468,8 +526,9 @@ export function PopupApp() {
         return
       }
 
-      const response = await getLibrary()
+      const [response, lists] = await Promise.all([getLibrary(), readPopupLists()])
       setSnapshot(response.snapshot)
+      setListOptions(buildPopupListOptions(response.snapshot.lists, lists))
     }
 
     chrome.storage.onChanged.addListener(handleStorageChange)
@@ -481,15 +540,17 @@ export function PopupApp() {
 
   useEffect(() => {
     const availableLists = getSortedLocalizedLists(
-      snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS],
+      listOptions,
       locale,
       t,
     )
 
     if (availableLists.length > 0 && !availableLists.some((list) => list.id === selectedList)) {
-      setSelectedList(availableLists[0].id)
+      const preferredDefault =
+        availableLists.find((list) => list.id === 'library')?.id ?? availableLists[0].id
+      setSelectedList(preferredDefault)
     }
-  }, [locale, selectedList, snapshot.lists, t])
+  }, [listOptions, locale, selectedList, t])
 
   useEffect(() => {
     if (detection) {
@@ -528,6 +589,7 @@ export function PopupApp() {
       })
 
       setSnapshot(response.snapshot)
+      setListOptions((current) => buildPopupListOptions(response.snapshot.lists, current))
       setMessageState({
         key: 'popup.savedUnder',
         params: {
@@ -547,7 +609,7 @@ export function PopupApp() {
   }
 
   const availableLists = getSortedLocalizedLists(
-    snapshot.lists.length > 0 ? snapshot.lists : [...SYSTEM_LISTS],
+    buildPopupListOptions(snapshot.lists, listOptions),
     locale,
     t,
   )
