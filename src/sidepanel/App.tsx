@@ -866,6 +866,12 @@ export function SidePanelApp() {
         </main>
       </div>
 
+      <div
+        className={`list-settings-scrim ${activeListSettings ? 'is-visible' : ''}`}
+        aria-hidden="true"
+        onClick={() => setActiveListSettingsId(null)}
+      />
+
       <aside className={`list-settings-drawer ${activeListSettings ? 'is-open' : ''}`}>
         {activeListSettings ? (
           <>
