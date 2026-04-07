@@ -7,6 +7,7 @@ import {
 import { AniListMetadataProvider } from '../src/shared/metadata/anilist-provider'
 import { HybridMetadataProvider } from '../src/shared/metadata/hybrid-provider'
 import { MockMetadataProvider } from '../src/shared/metadata/mock-provider'
+import { normalizeTitle } from '../src/shared/utils/normalize'
 
 describe('AniList metadata integration', () => {
   afterEach(() => {
@@ -130,5 +131,57 @@ describe('AniList metadata integration', () => {
     })
 
     expect(card.episodeCount).toBe(13)
+  })
+
+  it('matches AniList metadata through alternate titles such as romaji aliases', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              Page: {
+                media: [
+                  {
+                    id: 179813,
+                    type: 'ANIME',
+                    episodes: null,
+                    chapters: null,
+                    title: {
+                      romaji: 'Niwatori Fighter',
+                      english: 'Rooster Fighter',
+                      native: 'ニワトリ・ファイター',
+                    },
+                    nextAiringEpisode: {
+                      episode: 5,
+                    },
+                    description: 'Mock description',
+                    genres: ['Action'],
+                  },
+                ],
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              Page: {
+                media: [],
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+
+    const provider = new AniListMetadataProvider()
+    const card = await provider.findByNormalizedTitle(normalizeTitle('Niwatori Fighter'))
+
+    expect(card?.id).toBe('anilist:179813')
+    expect(card?.aliases).toContain('Niwatori Fighter')
+    expect(card?.episodeCount).toBe(4)
   })
 })

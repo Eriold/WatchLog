@@ -19,9 +19,11 @@ import { WatchLogRepository } from './storage/repository'
 import type {
   ExportActivityPayload,
   ExportCatalogPayload,
+  DetectionResult,
   SaveDetectionInput,
   UpdateEntryInput,
 } from './types'
+import { getDetectionMediaTypeHints, pickBestMetadataMatch } from './metadata/matching'
 import { sendRuntimeMessage } from './storage/browser'
 
 const metadataProvider = createMetadataProvider()
@@ -43,6 +45,11 @@ export async function reanalyzeActiveDetection(tabId?: number) {
 
 export async function saveDetection(payload: SaveDetectionInput) {
   return repository.saveDetection(payload) as Promise<SaveDetectionResponse>
+}
+
+export async function resolveDetectionMetadata(detection: DetectionResult) {
+  const items = await metadataProvider.search(detection.title)
+  return pickBestMetadataMatch(items, detection.title, getDetectionMediaTypeHints(detection))
 }
 
 export async function addFromExplorer(metadataId: string, listId: string) {

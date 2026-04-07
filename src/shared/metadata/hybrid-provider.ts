@@ -1,5 +1,6 @@
 import type { MetadataCard } from '../types'
 import { AniListMetadataProvider } from './anilist-provider'
+import { pickBestMetadataMatch } from './matching'
 import { MockMetadataProvider } from './mock-provider'
 import type { MetadataProvider } from './provider'
 
@@ -51,9 +52,14 @@ export class HybridMetadataProvider implements MetadataProvider {
   }
 
   async findByNormalizedTitle(normalizedTitle: string): Promise<MetadataCard | undefined> {
-    return (
-      (await this.mockProvider.findByNormalizedTitle(normalizedTitle)) ??
-      (await this.aniListProvider.findByNormalizedTitle(normalizedTitle))
+    const [mockMatch, aniListMatch] = await Promise.all([
+      this.mockProvider.findByNormalizedTitle(normalizedTitle),
+      this.aniListProvider.findByNormalizedTitle(normalizedTitle),
+    ])
+
+    return pickBestMetadataMatch(
+      [mockMatch, aniListMatch].filter((item): item is MetadataCard => Boolean(item)),
+      normalizedTitle,
     )
   }
 

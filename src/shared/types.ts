@@ -110,6 +110,7 @@ export interface MetadataCard {
   id: string
   title: string
   normalizedTitle: string
+  aliases?: string[]
   mediaType: MediaType
   poster?: string
   backdrop?: string

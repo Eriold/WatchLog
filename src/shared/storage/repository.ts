@@ -14,6 +14,8 @@ import type {
   WatchListDefinition,
   WatchLogSnapshot,
 } from '../types'
+import { hydrateDetectionWithMetadata } from '../metadata/detection-hydration'
+import { getMetadataNormalizedTitles } from '../metadata/matching'
 import { normalizeTitle, slugify } from '../utils/normalize'
 import { nowIso } from '../utils/time'
 import type { StorageProvider } from './provider'
@@ -38,89 +40,15 @@ function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   }
 }
 
-function resolveEpisodeTotal(
+function shouldPreserveDetectedTitle(
   detection: DetectionResult,
   metadata?: MetadataCard,
-): number | undefined {
-  const metadataTotal = metadata?.episodeCount
-
-  if (detection.episodeTotal !== undefined) {
-    return detection.episode !== undefined
-      ? Math.max(detection.episodeTotal, detection.episode)
-      : detection.episodeTotal
+): boolean {
+  if (!metadata) {
+    return false
   }
 
-  if (metadataTotal !== undefined) {
-    return detection.episode !== undefined
-      ? Math.max(metadataTotal, detection.episode)
-      : metadataTotal
-  }
-
-  return undefined
-}
-
-function resolveChapterTotal(
-  detection: DetectionResult,
-  metadata?: MetadataCard,
-): number | undefined {
-  const metadataTotal = metadata?.chapterCount
-
-  if (detection.chapterTotal !== undefined) {
-    return detection.chapter !== undefined
-      ? Math.max(detection.chapterTotal, detection.chapter)
-      : detection.chapterTotal
-  }
-
-  if (metadataTotal !== undefined) {
-    return detection.chapter !== undefined
-      ? Math.max(metadataTotal, detection.chapter)
-      : metadataTotal
-  }
-
-  return undefined
-}
-
-function buildProgressLabel(
-  detection: DetectionResult,
-  episodeTotal?: number,
-  chapterTotal?: number,
-): string {
-  if (detection.season !== undefined && detection.episode !== undefined) {
-    return `S${detection.season} ${detection.episode}${episodeTotal ? `/${episodeTotal}` : ''}`
-  }
-
-  if (detection.episode !== undefined) {
-    return `Ep ${detection.episode}${episodeTotal ? `/${episodeTotal}` : ''}`
-  }
-
-  if (detection.chapter !== undefined) {
-    return `Cap ${detection.chapter}${chapterTotal ? `/${chapterTotal}` : ''}`
-  }
-
-  if (episodeTotal !== undefined) {
-    return `0/${episodeTotal}`
-  }
-
-  if (chapterTotal !== undefined) {
-    return `0/${chapterTotal}`
-  }
-
-  return detection.progressLabel
-}
-
-function hydrateDetectionWithMetadata(
-  detection: DetectionResult,
-  metadata?: MetadataCard,
-): DetectionResult {
-  const episodeTotal = resolveEpisodeTotal(detection, metadata)
-  const chapterTotal = resolveChapterTotal(detection, metadata)
-
-  return {
-    ...detection,
-    episodeTotal,
-    chapterTotal,
-    progressLabel: buildProgressLabel(detection, episodeTotal, chapterTotal),
-  }
+  return getMetadataNormalizedTitles(metadata).includes(detection.normalizedTitle)
 }
 
 function createProgressState(detection: DetectionResult): ProgressState {
@@ -137,11 +65,14 @@ function createProgressState(detection: DetectionResult): ProgressState {
 function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard): CatalogEntry {
   const timestamp = nowIso()
   const temporaryPoster = getRandomTemporaryPoster()
+  const preserveDetectedTitle = shouldPreserveDetectedTitle(detection, metadata)
 
   return {
     id: metadata?.id ?? `catalog-${slugify(detection.title)}-${Date.now()}`,
-    title: metadata?.title ?? detection.title,
-    normalizedTitle: metadata?.normalizedTitle ?? detection.normalizedTitle,
+    title: preserveDetectedTitle ? detection.title : metadata?.title ?? detection.title,
+    normalizedTitle: preserveDetectedTitle
+      ? detection.normalizedTitle
+      : metadata?.normalizedTitle ?? detection.normalizedTitle,
     mediaType: metadata?.mediaType ?? detection.mediaType,
     poster: metadata?.poster ?? temporaryPoster,
     backdrop: metadata?.backdrop,
@@ -208,6 +139,7 @@ export class WatchLogRepository {
       (await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
     const hydratedDetection = hydrateDetectionWithMetadata(input.detection, metadata)
     const catalogMatch =
+      (metadata ? snapshot.catalog.find((item) => item.id === metadata.id) : undefined) ??
       snapshot.catalog.find((item) => {
         return (
           item.normalizedTitle === hydratedDetection.normalizedTitle &&

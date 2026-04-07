@@ -172,7 +172,7 @@ describe('detectCurrentDocument', () => {
     expect(result?.progressLabel).toContain('Cap 1080')
   })
 
-  it('extracts the series title when the h1 only contains the episode number', () => {
+  it('extracts the anime title when the h1 only contains the episode number', () => {
     const fixture = `
       <!doctype html>
       <html lang="es">
@@ -198,6 +198,34 @@ describe('detectCurrentDocument', () => {
     expect(result?.title).toBe('One Piece')
     expect(result?.episode).toBe(1156)
     expect(result?.progressLabel).toBe('Ep 1156')
-    expect(result?.mediaType).toBe('series')
+    expect(result?.mediaType).toBe('anime')
+  })
+
+  it('strips leading episode labels and infers anime on anime sites', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Episodio 4 - Niwatori Fighter - JKAnime</title>
+        </head>
+        <body>
+          <main>
+            <h1>Episodio 4 - Niwatori Fighter</h1>
+            <p>El gallo del barrio defiende a la humanidad.</p>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://jkanime.net/niwatori-fighter/4/',
+    )
+
+    expect(result?.sourceSite).toBe('jkanime.net')
+    expect(result?.title).toBe('Niwatori Fighter')
+    expect(result?.episode).toBe(4)
+    expect(result?.progressLabel).toBe('Ep 4')
+    expect(result?.mediaType).toBe('anime')
   })
 })

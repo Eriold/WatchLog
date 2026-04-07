@@ -40,6 +40,26 @@ export function pickAniListTitle(media: AniListMedia): string {
   )
 }
 
+function getAniListAliases(media: AniListMedia, title: string): string[] {
+  const seen = new Set<string>()
+  const aliases: string[] = []
+
+  for (const candidate of [
+    media.title?.english?.trim(),
+    media.title?.romaji?.trim(),
+    media.title?.native?.trim(),
+  ]) {
+    if (!candidate || candidate === title || seen.has(candidate)) {
+      continue
+    }
+
+    seen.add(candidate)
+    aliases.push(candidate)
+  }
+
+  return aliases
+}
+
 function decodeHtmlEntities(input: string): string {
   if (typeof document !== 'undefined') {
     const textarea = document.createElement('textarea')
@@ -105,6 +125,7 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
     id: `anilist:${media.id}`,
     title,
     normalizedTitle: normalizeTitle(title),
+    aliases: getAniListAliases(media, title),
     mediaType: mapAniListTypeToMediaType(media.type),
     poster:
       media.coverImage?.extraLarge ??

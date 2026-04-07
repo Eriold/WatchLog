@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
-import { getActiveDetection, getLibrary, saveDetection } from '../shared/client'
+import {
+  getActiveDetection,
+  getLibrary,
+  resolveDetectionMetadata,
+  saveDetection,
+} from '../shared/client'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
 import { findMatchingLibraryEntry, toLibraryEntries } from '../shared/selectors'
 import { storageGet } from '../shared/storage/browser'
 import type {
   DetectionResult,
   LibraryEntry,
+  MetadataCard,
   WatchListDefinition,
   WatchLogSnapshot,
 } from '../shared/types'
@@ -18,6 +24,7 @@ import {
   parseProgress,
   resolveDetectedTitle,
 } from '../shared/detection/helpers'
+import { hydrateDetectionWithMetadata } from '../shared/metadata/detection-hydration'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
 import {
@@ -364,6 +371,7 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
 export function PopupApp() {
   const { locale, t } = useI18n()
   const [detection, setDetection] = useState<DetectionResult | null>(null)
+  const [resolvedMetadata, setResolvedMetadata] = useState<MetadataCard | null>(null)
   const [debug, setDebug] = useState<DetectionDebugInfo>(getEmptyDebug)
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
   const [libraryHydrated, setLibraryHydrated] = useState(false)
@@ -454,6 +462,16 @@ export function PopupApp() {
     return null
   }
 
+  async function loadDetectionWithRetry(): Promise<DetectionResult | null> {
+    const initialDetection = await loadDetection(false)
+    if (initialDetection) {
+      return initialDetection
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 1200))
+    return loadDetection(true)
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -492,7 +510,7 @@ export function PopupApp() {
         setListOptions(mergePopupLists([]))
       })
 
-    void loadDetection(false)
+    void loadDetectionWithRetry()
       .then((activeDetection) => {
         if (cancelled) {
           return
@@ -562,11 +580,67 @@ export function PopupApp() {
       setCapturePoster(getRandomTemporaryPoster())
       setSyncedDetectionSignature(null)
     }
-  }, [detection])
+  }, [detection?.normalizedTitle])
 
   const matchedLibraryEntry = detection
     ? findMatchingLibraryEntry(snapshot, detection)
     : null
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!detection || matchedLibraryEntry) {
+      setResolvedMetadata(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void resolveDetectionMetadata(detection)
+      .then((metadata) => {
+        if (cancelled) {
+          return
+        }
+
+        setResolvedMetadata(metadata ?? null)
+
+        if (!metadata) {
+          return
+        }
+
+        setDetection((current) => {
+          if (!current) {
+            return current
+          }
+
+          const hydrated = hydrateDetectionWithMetadata(current, metadata)
+          if (
+            current.mediaType === hydrated.mediaType &&
+            current.episodeTotal === hydrated.episodeTotal &&
+            current.chapterTotal === hydrated.chapterTotal &&
+            current.progressLabel === hydrated.progressLabel
+          ) {
+            return current
+          }
+
+          return hydrated
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolvedMetadata(null)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    detection?.normalizedTitle,
+    detection?.sourceSite,
+    detection?.title,
+    matchedLibraryEntry?.catalog.id,
+  ])
 
   useEffect(() => {
     if (!detection || !libraryHydrated) {
@@ -642,6 +716,7 @@ export function PopupApp() {
         detection,
         listId: selectedList,
         favorite,
+        metadata: resolvedMetadata ?? undefined,
       })
 
       setSnapshot(response.snapshot)
@@ -679,7 +754,7 @@ export function PopupApp() {
   )
   const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
   const fallbackCapturePoster = detection
-    ? matchedLibraryEntry?.catalog.poster ?? capturePoster
+    ? matchedLibraryEntry?.catalog.poster ?? resolvedMetadata?.poster ?? capturePoster
     : '/mock-posters/poster-01.svg'
   const message = t(messageState.key, messageState.params)
 

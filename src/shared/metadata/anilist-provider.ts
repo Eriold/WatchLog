@@ -1,6 +1,7 @@
 import type { MetadataCard } from '../types'
 import { AniListClient } from './anilist-client'
 import { mapAniListMediaToMetadataCard } from './anilist-mappers'
+import { getMetadataNormalizedTitles, pickBestMetadataMatch } from './matching'
 import type { MetadataProvider } from './provider'
 
 function parseAniListId(id: string): number | null {
@@ -55,13 +56,13 @@ export class AniListMetadataProvider implements MetadataProvider {
     }
 
     const cards = await this.search(query)
-    const direct = cards.find((item) => item.normalizedTitle === normalizedTitle)
+    const direct = cards.find((item) => getMetadataNormalizedTitles(item).includes(normalizedTitle))
 
     if (direct) {
       return direct
     }
 
-    return cards.find((item) => normalizedTitle.includes(item.normalizedTitle))
+    return pickBestMetadataMatch(cards, normalizedTitle, ['anime', 'manga'])
   }
 
   async getById(id: string): Promise<MetadataCard | undefined> {

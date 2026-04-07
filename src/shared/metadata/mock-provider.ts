@@ -1,5 +1,6 @@
 import type { MetadataCard } from '../types'
 import { normalizeTitle } from '../utils/normalize'
+import { getMetadataNormalizedTitles, pickBestMetadataMatch } from './matching'
 import type { MetadataProvider } from './provider'
 
 function svgPoster(title: string, accent: string): string {
@@ -140,12 +141,14 @@ export class MockMetadataProvider implements MetadataProvider {
   }
 
   async findByNormalizedTitle(normalizedTitle: string): Promise<MetadataCard | undefined> {
-    const direct = MOCK_LIBRARY.find((item) => item.normalizedTitle === normalizedTitle)
+    const direct = MOCK_LIBRARY.find((item) =>
+      getMetadataNormalizedTitles(item).includes(normalizedTitle),
+    )
     if (direct) {
       return direct
     }
 
-    return MOCK_LIBRARY.find((item) => normalizedTitle.includes(item.normalizedTitle))
+    return pickBestMetadataMatch(MOCK_LIBRARY, normalizedTitle)
   }
 
   async getById(id: string): Promise<MetadataCard | undefined> {

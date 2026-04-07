@@ -62,9 +62,26 @@ export function cleanTitle(title: string, siteName: string): string {
   )
 }
 
-function stripProgressDecorators(title: string): string {
+function stripLeadingProgressDecorators(title: string): string {
+  const leadingProgressPatterns = [
+    /^(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?\s*[-:|]\s*)/i,
+    /^(?:Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?\s*[-:|]\s*)/i,
+    /^(?:Temporada\s*\d+\s*(?:Cap[ií]tulo|Capitulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?\s*[-:|]\s*)/i,
+    /^(?:(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Capitulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?\s*[-:|]\s*)/i,
+  ]
+
+  for (const pattern of leadingProgressPatterns) {
+    if (pattern.test(title)) {
+      return compactText(title.replace(pattern, ''))
+    }
+  }
+
+  return title
+}
+
+function stripTrailingProgressDecorators(title: string): string {
   const decoratedProgressPatterns = [
-    /\b(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?|Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?|Temporada\s*\d+\s*(?:Cap[ií]tulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?|(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?)(?:\b.*)?$/i,
+    /\b(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?|Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?|Temporada\s*\d+\s*(?:Cap[ií]tulo|Capitulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?|(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Capitulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?)(?:\b.*)?$/i,
   ]
 
   for (const pattern of decoratedProgressPatterns) {
@@ -83,8 +100,8 @@ export function looksLikeStandaloneProgressLabel(title: string): boolean {
   const standaloneProgressPatterns = [
     /^(?:S(?:eason)?\s*\d+\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*\d+(?:\s*\/\s*\d+)?)$/i,
     /^(?:Season\s*\d+\s*Episode\s*\d+(?:\s*of\s*\d+)?)$/i,
-    /^(?:Temporada\s*\d+\s*(?:Cap[ií]tulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?)$/i,
-    /^(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?$/i,
+    /^(?:Temporada\s*\d+\s*(?:Cap[ií]tulo|Capitulo|Episodio)\s*\d+(?:\s*\/\s*\d+)?)$/i,
+    /^(?:Episode|Episodio|Ep\.?|Cap[ií]tulo|Capitulo|Cap\.?|Chapter|Ch\.?)\s*\d+(?:\s*\/\s*\d+)?$/i,
   ]
 
   return standaloneProgressPatterns.some((pattern) => pattern.test(normalized))
@@ -113,7 +130,9 @@ export function resolveDetectedTitle(
     seen.add(cleaned)
 
     if (!looksLikeStandaloneProgressLabel(cleaned)) {
-      const stripped = useProgressStripping ? stripProgressDecorators(cleaned) : cleaned
+      const stripped = useProgressStripping
+        ? stripTrailingProgressDecorators(stripLeadingProgressDecorators(cleaned))
+        : cleaned
       if (stripped && !looksLikeStandaloneProgressLabel(stripped)) {
         return stripped
       }
@@ -168,7 +187,7 @@ export function parseProgress(text: string): {
   const seasonEpisodePatterns = [
     /S(?:eason)?\s*(\d+)\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*(\d+)(?:\s*\/\s*(\d+))?/i,
     /Season\s*(\d+)\s*Episode\s*(\d+)(?:\s*of\s*(\d+))?/i,
-    /Temporada\s*(\d+)\s*(?:Cap[ií]tulo|Episodio)\s*(\d+)(?:\s*\/\s*(\d+))?/i,
+    /Temporada\s*(\d+)\s*(?:Cap[ií]tulo|Capitulo|Episodio)\s*(\d+)(?:\s*\/\s*(\d+))?/i,
   ]
 
   for (const pattern of seasonEpisodePatterns) {
@@ -210,6 +229,7 @@ export function parseProgress(text: string): {
   const chapterPatterns = [
     /Chapter\s*(\d+)(?:\s*\/\s*(\d+))?/i,
     /Cap[ií]tulo\s*(\d+)(?:\s*\/\s*(\d+))?/i,
+    /Capitulo\s*(\d+)(?:\s*\/\s*(\d+))?/i,
     /Ch\.?\s*(\d+)(?:\s*\/\s*(\d+))?/i,
   ]
 
@@ -238,17 +258,39 @@ export function inferMediaType(
   fallbackTitle: string,
 ): MediaType {
   const hostname = url.hostname
+  const hintText = `${hostname} ${url.pathname} ${fallbackTitle}`.toLowerCase()
+  const looksLikeAnimeSite =
+    /\b(?:anime|jkanime|animeflv|animeav1|crunchyroll|hidive|otaku|otakudesu|animesaturn|aniwatch)\b/i.test(
+      hintText,
+    )
+  const looksLikeMangaSite =
+    /\b(?:manga|manhwa|manhua|webtoon|lectormanga|lectortmo|mangadex|manganato|asurascans)\b/i.test(
+      hintText,
+    )
+  const looksLikeNovelSite = /\b(?:novel|ranobe|light\s*novel|web\s*novel)\b/i.test(hintText)
 
   if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
     return 'video'
   }
 
   if (parsed.chapter) {
-    return /novel/i.test(fallbackTitle) ? 'novel' : 'manga'
+    return looksLikeNovelSite ? 'novel' : 'manga'
   }
 
   if (parsed.season || parsed.episode) {
-    return 'series'
+    return looksLikeAnimeSite ? 'anime' : 'series'
+  }
+
+  if (looksLikeAnimeSite) {
+    return 'anime'
+  }
+
+  if (looksLikeMangaSite) {
+    return 'manga'
+  }
+
+  if (looksLikeNovelSite) {
+    return 'novel'
   }
 
   return 'movie'
@@ -260,7 +302,7 @@ export function buildDetection(
   rawTitle: string,
   confidence: number,
 ): DetectionResult | null {
-  const title = cleanTitle(rawTitle, siteName)
+  const title = resolveDetectedTitle(siteName, [rawTitle])
   if (!title || isPlaceholderTitle(title, siteName)) {
     return null
   }
