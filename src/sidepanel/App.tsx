@@ -176,6 +176,114 @@ function CloseIcon({ className }: { className?: string }) {
   )
 }
 
+type NavGlyphKind = 'library' | 'watching' | 'completed' | 'favorites' | 'explorer'
+
+function NavGlyph({ kind, className }: { kind: NavGlyphKind; className?: string }) {
+  if (kind === 'library') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path
+          d="M5 6.5A2.5 2.5 0 0 1 7.5 4H19v14.5A1.5 1.5 0 0 0 17.5 17H7.5A2.5 2.5 0 0 0 5 19.5V6.5Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+        <path
+          d="M7.5 4v13M9.5 8H16M9.5 11H16M9.5 14H13.5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+      </svg>
+    )
+  }
+
+  if (kind === 'watching') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <circle
+          cx="12"
+          cy="12"
+          r="8.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+        />
+        <path
+          d="m10 8.8 5 3.2-5 3.2V8.8Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+      </svg>
+    )
+  }
+
+  if (kind === 'completed') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <circle
+          cx="12"
+          cy="12"
+          r="8.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+        />
+        <path
+          d="m8.5 12.3 2.4 2.4 4.8-5.2"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.9"
+        />
+      </svg>
+    )
+  }
+
+  if (kind === 'favorites') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path
+          d="M12 19.2 5.9 13.5A4.1 4.1 0 0 1 11.7 7.8L12 8.1l.3-.3a4.1 4.1 0 0 1 5.8 5.7L12 19.2Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.7"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <circle
+        cx="12"
+        cy="12"
+        r="8.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M3.8 12h16.4M12 3.8c2.1 2.2 3.2 5 3.2 8.2S14.1 18 12 20.2C9.9 18 8.8 15.2 8.8 12S9.9 6 12 3.8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </svg>
+  )
+}
+
 type ListModalState =
   | {
       mode: 'clear'
@@ -295,11 +403,11 @@ export function SidePanelApp() {
 
   const entries = toLibraryEntries(snapshot)
   const primaryViews = [
-    { id: ALL_TITLES_VIEW_ID, label: t('views.allTitles'), icon: 'LB' },
-    { id: 'watching', label: t('lists.watching'), icon: 'PL' },
-    { id: 'completed', label: t('lists.completed'), icon: 'OK' },
-    { id: FAVORITES_VIEW_ID, label: t('views.favorites'), icon: 'FV' },
-    { id: EXPLORER_TAB_ID, label: t('views.explorer'), icon: 'EX' },
+    { id: ALL_TITLES_VIEW_ID, label: t('views.allTitles'), icon: 'library' as const },
+    { id: 'watching', label: t('lists.watching'), icon: 'watching' as const },
+    { id: 'completed', label: t('lists.completed'), icon: 'completed' as const },
+    { id: FAVORITES_VIEW_ID, label: t('views.favorites'), icon: 'favorites' as const },
+    { id: EXPLORER_TAB_ID, label: t('views.explorer'), icon: 'explorer' as const },
   ]
   const queueLists = snapshot.lists.filter((list) => !['watching', 'completed'].includes(list.id))
   const activeListSettings =
@@ -612,7 +720,9 @@ export function SidePanelApp() {
               type="button"
               onClick={() => setSelectedViewId(view.id)}
             >
-              <span className="library-nav-icon">{view.icon}</span>
+              <span className="library-nav-icon">
+                <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
+              </span>
               <span className="library-nav-copy">
                 <strong>{view.label}</strong>
                 <span>
