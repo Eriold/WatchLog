@@ -486,9 +486,17 @@
   gap: 8px;
 }
 
+.library-card-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .media-badge,
 .favorite-badge,
-.favorite-toggle-chip {
+.favorite-toggle-chip,
+.score-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -598,6 +606,21 @@
 
 .favorite-toggle-chip.is-active {
   box-shadow: 0 0 22px rgba(255, 110, 132, 0.18);
+}
+
+.score-badge {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(5, 8, 16, 0.74);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(6px);
 }
 
 .library-card-progress {

@@ -206,6 +206,7 @@ describe('WatchLogRepository', () => {
     expect(response.entry.catalog.backdrop).toBe('https://img.anilist.co/one-piece-banner.jpg')
     expect(response.entry.catalog.description).toBe('Real AniList metadata')
     expect(response.entry.catalog.episodeCount).toBe(1122)
+    expect(response.entry.catalog.score).toBe(8.8)
     expect(response.entry.activity.currentProgress.progressText).toBe('0/1122')
     expect(response.entry.activity.currentProgress.episodeTotal).toBe(1122)
   })

@@ -26,6 +26,7 @@ import {
   resolveDetectedTitle,
 } from '../shared/detection/helpers'
 import { hydrateDetectionWithMetadata } from '../shared/metadata/detection-hydration'
+import { buildLibraryUrl } from '../shared/navigation'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
 import {
@@ -769,11 +770,22 @@ export function PopupApp() {
     }
   }
 
-  async function openSidePanel(): Promise<void> {
+  async function openLibrary(target?: { viewId?: string; catalogId?: string }): Promise<void> {
     await chrome.tabs.create({
-      url: chrome.runtime.getURL('library.html'),
+      url: buildLibraryUrl(chrome.runtime.getURL('library.html'), target),
     })
     window.close()
+  }
+
+  async function handleOpenMatchedEntry(): Promise<void> {
+    if (!matchedLibraryEntry) {
+      return
+    }
+
+    await openLibrary({
+      viewId: matchedLibraryEntry.activity.status,
+      catalogId: matchedLibraryEntry.catalog.id,
+    })
   }
 
   const availableLists = getSortedLocalizedLists(
@@ -789,7 +801,8 @@ export function PopupApp() {
     recentEntries.length === 1 ? 'popup.activeSession.one' : 'popup.activeSession.other',
     { count: recentEntries.length },
   )
-  const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
+  // const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
+  const captureInitials = detection ? (detection.title) : 'WL'
   const fallbackCapturePoster = detection
     ? matchedLibraryEntry?.catalog.poster ?? resolvedMetadata?.poster ?? capturePoster
     : '/mock-posters/poster-01.svg'
@@ -816,7 +829,7 @@ export function PopupApp() {
               className="icon-surface-button"
               type="button"
               title={t('popup.openFullLibrary')}
-              onClick={openSidePanel}
+              onClick={() => void openLibrary()}
             >
               <LibraryIcon />
             </button>
@@ -847,9 +860,6 @@ export function PopupApp() {
                     <span className="capture-art-overlay" />
                     <span className="capture-site">{detection.sourceSite}</span>
                     <strong className="capture-initials">{captureInitials}</strong>
-                    <span className="capture-play-badge">
-                      <PlayIcon />
-                    </span>
                     <img
                       className="capture-favicon-badge"
                       src={detection.favicon}
@@ -987,10 +997,22 @@ export function PopupApp() {
               </article>
 
               <div className="popup-footer popup-primary-actions">
-                <button className="button" type="button" disabled={busy} onClick={handleSave}>
-                  {t('popup.saveSuggestion')}
-                </button>
-                <button className="button secondary" type="button" onClick={openSidePanel}>
+                {matchedLibraryEntry ? (
+                  <button className="button" type="button" onClick={() => void handleOpenMatchedEntry()}>
+                    {t('popup.addedInList', {
+                      label: getLocalizedListLabel(
+                        availableLists,
+                        matchedLibraryEntry.activity.status,
+                        t,
+                      ),
+                    })}
+                  </button>
+                ) : (
+                  <button className="button" type="button" disabled={busy} onClick={handleSave}>
+                    {t('popup.saveSuggestion')}
+                  </button>
+                )}
+                <button className="button secondary" type="button" onClick={() => void openLibrary()}>
                   {t('popup.openFullLibrary')}
                 </button>
               </div>
@@ -1039,7 +1061,7 @@ export function PopupApp() {
               >
                 {t('popup.reanalyzeTab')}
               </button>
-              <button className="button secondary" type="button" onClick={openSidePanel}>
+              <button className="button secondary" type="button" onClick={() => void openLibrary()}>
                 {t('popup.openFullLibrary')}
               </button>
             </div>

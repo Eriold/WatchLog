@@ -49,6 +49,7 @@ export interface CatalogEntry {
   normalizedTitle: string
   aliases?: string[]
   mediaType: MediaType
+  score?: number
   poster?: string
   backdrop?: string
   genres: string[]

@@ -161,6 +161,7 @@ function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard)
     normalizedTitle: getCatalogPrimaryNormalizedTitle(detection, metadata),
     aliases: buildCatalogAliases(primaryTitle, undefined, detection, metadata),
     mediaType: metadata?.mediaType ?? detection.mediaType,
+    score: metadata?.score,
     poster: metadata?.poster ?? temporaryPoster,
     backdrop: metadata?.backdrop,
     genres: metadata?.genres ?? [],
@@ -235,6 +236,7 @@ export class WatchLogRepository {
           normalizedTitle: getCatalogPrimaryNormalizedTitle(hydratedDetection, metadata),
           aliases: buildCatalogAliases(primaryTitle, catalogMatch, hydratedDetection, metadata),
           mediaType: metadata?.mediaType ?? catalogMatch.mediaType,
+          score: metadata?.score ?? catalogMatch.score,
           updatedAt: nowIso(),
           poster:
             (catalogMatch.poster && !hasTemporaryPoster(catalogMatch.poster)

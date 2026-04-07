@@ -11,6 +11,7 @@ import {
   updateEntry,
 } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
+import { parseLibraryNavigationTarget } from '../shared/navigation'
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type {
@@ -34,6 +35,22 @@ const FAVORITES_VIEW_ID = 'favorites'
 
 function getInitialSnapshot(): WatchLogSnapshot {
   return { catalog: [], activity: [], lists: [] }
+}
+
+function getInitialLibrarySelection(): { viewId: string; catalogId: string | null } {
+  if (typeof window === 'undefined') {
+    return {
+      viewId: ALL_TITLES_VIEW_ID,
+      catalogId: null,
+    }
+  }
+
+  const target = parseLibraryNavigationTarget(window.location.search)
+
+  return {
+    viewId: target.viewId ?? ALL_TITLES_VIEW_ID,
+    catalogId: target.catalogId,
+  }
 }
 
 function getViewCount(viewId: string, entries: LibraryEntry[], explorerItems: MetadataCard[]): number {
@@ -160,6 +177,14 @@ function getOtherTitles(
   item: Pick<MetadataCard, 'aliases'> & Pick<LibraryEntry['catalog'], 'title'>,
 ): string[] {
   return (item.aliases ?? []).filter((title) => title.trim() && title !== item.title)
+}
+
+function formatCommunityScore(score?: number): string | null {
+  if (score === undefined || Number.isNaN(score)) {
+    return null
+  }
+
+  return score % 1 === 0 ? String(score) : score.toFixed(1)
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -322,8 +347,10 @@ type EntryDeleteState = {
 export function SidePanelApp() {
   const { locale, t } = useI18n()
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
-  const [selectedViewId, setSelectedViewId] = useState(ALL_TITLES_VIEW_ID)
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
+  const [selectedViewId, setSelectedViewId] = useState(() => getInitialLibrarySelection().viewId)
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(
+    () => getInitialLibrarySelection().catalogId,
+  )
   const [selectedExplorerId, setSelectedExplorerId] = useState<string | null>(null)
   const [libraryQuery, setLibraryQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -357,6 +384,16 @@ export function SidePanelApp() {
   useEffect(() => {
     document.title = t('titles.library')
   }, [t])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.search) {
+      return
+    }
+
+    const url = new URL(window.location.href)
+    url.search = ''
+    window.history.replaceState(null, '', url.toString())
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1025,9 +1062,14 @@ export function SidePanelApp() {
                       <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
                       <span className="library-card-overlay" />
                       <div className="library-card-badges">
-                        <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
-                          {getLocalizedMediaTypeLabel(item.mediaType, t)}
-                        </span>
+                        <div className="library-card-badge-group">
+                          <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
+                            {getLocalizedMediaTypeLabel(item.mediaType, t)}
+                          </span>
+                        </div>
+                        {formatCommunityScore(item.score) ? (
+                          <span className="score-badge">{formatCommunityScore(item.score)}</span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="library-card-body">
@@ -1101,10 +1143,15 @@ export function SidePanelApp() {
                         <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
                         <span className="library-card-overlay" />
                         <div className="library-card-badges">
-                          <span className={`media-badge ${getMediaTypeBadgeClass(entry.catalog.mediaType)}`}>
-                            {getLocalizedMediaTypeLabel(entry.catalog.mediaType, t)}
-                          </span>
-                          {entry.activity.favorite ? <span className="favorite-badge">{t('common.favorite')}</span> : null}
+                          <div className="library-card-badge-group">
+                            <span className={`media-badge ${getMediaTypeBadgeClass(entry.catalog.mediaType)}`}>
+                              {getLocalizedMediaTypeLabel(entry.catalog.mediaType, t)}
+                            </span>
+                            {entry.activity.favorite ? <span className="favorite-badge">{t('common.favorite')}</span> : null}
+                          </div>
+                          {formatCommunityScore(entry.catalog.score) ? (
+                            <span className="score-badge">{formatCommunityScore(entry.catalog.score)}</span>
+                          ) : null}
                         </div>
                         <div className="library-card-progress">
                           <div className="library-card-progress-copy">
