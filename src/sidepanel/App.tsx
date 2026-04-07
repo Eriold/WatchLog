@@ -12,6 +12,7 @@ import {
 } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
 import { parseLibraryNavigationTarget } from '../shared/navigation'
+import { getResolvedProgressState } from '../shared/progress'
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type {
@@ -94,7 +95,14 @@ function getViewDescription(
 }
 
 function getProgressPercent(entry: LibraryEntry): number {
-  const progress = entry.activity.currentProgress
+  if (entry.activity.status === 'completed') {
+    return 100
+  }
+
+  const progress = getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+    episodeCount: entry.catalog.episodeCount,
+    chapterCount: entry.catalog.chapterCount,
+  })
   if (progress.episode !== undefined && progress.episodeTotal && progress.episodeTotal > 0) {
     return Math.min(100, Math.max(0, Math.round((progress.episode / progress.episodeTotal) * 100)))
   }
@@ -105,15 +113,26 @@ function getProgressPercent(entry: LibraryEntry): number {
   if (percentMatch) {
     return Math.min(100, Math.max(0, Number.parseInt(percentMatch[1], 10)))
   }
-  return entry.activity.status === 'completed' ? 100 : 0
+  return 0
 }
 
 function getListEntryCount(listId: string, entries: LibraryEntry[]): number {
   return entries.filter((entry) => entry.activity.status === listId).length
 }
 
+function getEntryDisplayProgress(entry: LibraryEntry) {
+  return getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+    episodeCount: entry.catalog.episodeCount,
+    chapterCount: entry.catalog.chapterCount,
+  })
+}
+
+function getEntryDisplayProgressText(entry: LibraryEntry): string {
+  return getEntryDisplayProgress(entry).progressText
+}
+
 function getRemainingUnits(entry: LibraryEntry): number | null {
-  const progress = entry.activity.currentProgress
+  const progress = getEntryDisplayProgress(entry)
 
   if (progress.episode !== undefined && progress.episodeTotal) {
     return Math.max(0, progress.episodeTotal - progress.episode)
@@ -127,7 +146,7 @@ function getRemainingUnits(entry: LibraryEntry): number | null {
 }
 
 function getProgressCurrentValue(entry: LibraryEntry): string {
-  const progress = entry.activity.currentProgress
+  const progress = getEntryDisplayProgress(entry)
 
   if (progress.episode !== undefined) {
     return String(progress.episode).padStart(2, '0')
@@ -141,7 +160,7 @@ function getProgressCurrentValue(entry: LibraryEntry): string {
 }
 
 function getProgressTotalValue(entry: LibraryEntry): string {
-  const progress = entry.activity.currentProgress
+  const progress = getEntryDisplayProgress(entry)
 
   if (progress.episodeTotal !== undefined) {
     return String(progress.episodeTotal).padStart(2, '0')
@@ -522,7 +541,7 @@ export function SidePanelApp() {
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? {
         notes: selectedEntry.activity.manualNotes,
-        progressText: selectedEntry.activity.currentProgress.progressText,
+        progressText: getEntryDisplayProgressText(selectedEntry),
         listId: selectedEntry.activity.status,
         favorite: selectedEntry.activity.favorite,
       }
@@ -1160,7 +1179,7 @@ export function SidePanelApp() {
                                 ? t('library.completedTrack')
                                 : t('library.activeTrack')}
                             </span>
-                            <span>{progress > 0 ? `${progress}%` : entry.activity.currentProgress.progressText}</span>
+                            <span>{progress > 0 ? `${progress}%` : getEntryDisplayProgressText(entry)}</span>
                           </div>
                           <div className="library-card-progress-track">
                             <div className="library-card-progress-value" style={{ width: `${progress}%` }} />
@@ -1181,7 +1200,7 @@ export function SidePanelApp() {
                               <span className="genre-chip" key={token}>{token}</span>
                             ))}
                         </div>
-                        <p className="library-card-description">{entry.activity.currentProgress.progressText}</p>
+                        <p className="library-card-description">{getEntryDisplayProgressText(entry)}</p>
                       </div>
                     </article>
                   )
@@ -1266,7 +1285,7 @@ export function SidePanelApp() {
                         ? t('library.entryRemaining', {
                             count: getRemainingUnits(selectedEntry) ?? 0,
                           })
-                        : selectedEntry.activity.currentProgress.progressText}
+                        : getEntryDisplayProgressText(selectedEntry)}
                     </div>
                   </div>
                 </div>
@@ -1352,7 +1371,7 @@ export function SidePanelApp() {
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('popup.progressLabel')}</span>
-                    <strong>{selectedEntry.activity.currentProgress.progressText}</strong>
+                    <strong>{getEntryDisplayProgressText(selectedEntry)}</strong>
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('library.listItemCount')}</span>

@@ -25,8 +25,12 @@ import {
   parseProgress,
   resolveDetectedTitle,
 } from '../shared/detection/helpers'
-import { hydrateDetectionWithMetadata } from '../shared/metadata/detection-hydration'
+import {
+  hydrateDetectionWithMetadata,
+  hydrateDetectionWithStoredProgress,
+} from '../shared/metadata/detection-hydration'
 import { buildLibraryUrl } from '../shared/navigation'
+import { getResolvedProgressState } from '../shared/progress'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
 import {
@@ -262,7 +266,10 @@ function getDetectionProgressPercent(detection: DetectionResult): number {
 }
 
 function getEntryProgressPercent(entry: LibraryEntry): number {
-  const progress = entry.activity.currentProgress
+  const progress = getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+    episodeCount: entry.catalog.episodeCount,
+    chapterCount: entry.catalog.chapterCount,
+  })
   return inferProgressPercent(
     progress.progressText,
     progress.episode,
@@ -270,6 +277,13 @@ function getEntryProgressPercent(entry: LibraryEntry): number {
     progress.chapter,
     progress.chapterTotal,
   )
+}
+
+function getPopupEntryProgressText(entry: LibraryEntry): string {
+  return getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+    episodeCount: entry.catalog.episodeCount,
+    chapterCount: entry.catalog.chapterCount,
+  }).progressText
 }
 
 function buildDetectionFromSnapshot(
@@ -718,10 +732,33 @@ export function PopupApp() {
       setSelectedList(matchedLibraryEntry.activity.status)
       setFavorite(matchedLibraryEntry.activity.favorite)
 
+      const hydratedDetection = hydrateDetectionWithStoredProgress(
+        {
+          ...detection,
+          title: matchedLibraryEntry.catalog.title,
+          normalizedTitle: matchedLibraryEntry.catalog.normalizedTitle,
+          mediaType: matchedLibraryEntry.catalog.mediaType,
+        },
+        getResolvedProgressState(
+          matchedLibraryEntry.activity.currentProgress,
+          matchedLibraryEntry.activity.status,
+          {
+            episodeCount: matchedLibraryEntry.catalog.episodeCount,
+            chapterCount: matchedLibraryEntry.catalog.chapterCount,
+          },
+        ),
+      )
+
       if (
-        matchedLibraryEntry.catalog.title !== detection.title ||
-        matchedLibraryEntry.catalog.normalizedTitle !== detection.normalizedTitle ||
-        matchedLibraryEntry.catalog.mediaType !== detection.mediaType
+        hydratedDetection.title !== detection.title ||
+        hydratedDetection.normalizedTitle !== detection.normalizedTitle ||
+        hydratedDetection.mediaType !== detection.mediaType ||
+        hydratedDetection.season !== detection.season ||
+        hydratedDetection.episode !== detection.episode ||
+        hydratedDetection.episodeTotal !== detection.episodeTotal ||
+        hydratedDetection.chapter !== detection.chapter ||
+        hydratedDetection.chapterTotal !== detection.chapterTotal ||
+        hydratedDetection.progressLabel !== detection.progressLabel
       ) {
         setDetection((current) => {
           if (!current) {
@@ -730,9 +767,7 @@ export function PopupApp() {
 
           return {
             ...current,
-            title: matchedLibraryEntry.catalog.title,
-            normalizedTitle: matchedLibraryEntry.catalog.normalizedTitle,
-            mediaType: matchedLibraryEntry.catalog.mediaType,
+            ...hydratedDetection,
           }
         })
       }
@@ -1150,7 +1185,7 @@ export function PopupApp() {
                   <div>
                     <strong className="recent-title">{entry.catalog.title}</strong>
                     <p className="recent-subtitle">
-                      {entry.activity.currentProgress.progressText} /{' '}
+                      {getPopupEntryProgressText(entry)} /{' '}
                       {getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}
                     </p>
                   </div>

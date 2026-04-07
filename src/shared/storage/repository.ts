@@ -27,6 +27,7 @@ import { normalizeTitle, slugify } from '../utils/normalize'
 import { nowIso } from '../utils/time'
 import type { StorageProvider } from './provider'
 import { getRandomTemporaryPoster, hasTemporaryPoster } from '../mock-posters'
+import { getResolvedProgressState } from '../progress'
 
 function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   const detectedAt = nowIso()
@@ -150,6 +151,17 @@ function createProgressState(detection: DetectionResult): ProgressState {
   }
 }
 
+function normalizeEntryProgress(
+  progress: ProgressState,
+  status: string,
+  catalog: Pick<CatalogEntry, 'episodeCount' | 'chapterCount'>,
+): ProgressState {
+  return getResolvedProgressState(progress, status, {
+    episodeCount: catalog.episodeCount,
+    chapterCount: catalog.chapterCount,
+  })
+}
+
 function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard): CatalogEntry {
   const timestamp = nowIso()
   const temporaryPoster = getRandomTemporaryPoster()
@@ -258,21 +270,30 @@ export class WatchLogRepository {
 
     const source = createSourceEntry(hydratedDetection)
     const existingActivity = snapshot.activity.find((item) => item.catalogId === catalog.id)
+    const nextStatus = input.listId
     const updatedActivity: ActivityEntry = existingActivity
       ? {
           ...existingActivity,
-          status: input.listId,
+          status: nextStatus,
           favorite: input.favorite ?? existingActivity.favorite,
-          currentProgress: createProgressState(hydratedDetection),
+          currentProgress: normalizeEntryProgress(
+            createProgressState(hydratedDetection),
+            nextStatus,
+            catalog,
+          ),
           lastSource: source,
           sourceHistory: dedupeHistory(existingActivity.sourceHistory, source),
           updatedAt: nowIso(),
         }
       : {
           catalogId: catalog.id,
-          status: input.listId,
+          status: nextStatus,
           favorite: input.favorite ?? false,
-          currentProgress: createProgressState(hydratedDetection),
+          currentProgress: normalizeEntryProgress(
+            createProgressState(hydratedDetection),
+            nextStatus,
+            catalog,
+          ),
           lastSource: source,
           sourceHistory: [source],
           manualNotes: '',
@@ -324,24 +345,28 @@ export class WatchLogRepository {
   async updateEntry(input: UpdateEntryInput): Promise<{ entry: LibraryEntry | null; snapshot: WatchLogSnapshot }> {
     const snapshot = await this.storageProvider.getSnapshot()
     const activity = snapshot.activity.find((item) => item.catalogId === input.catalogId)
+    const catalog = snapshot.catalog.find((item) => item.id === input.catalogId)
 
-    if (!activity) {
+    if (!activity || !catalog) {
       return { entry: null, snapshot }
     }
 
+    const nextStatus = input.listId ?? activity.status
+    const nextProgress = input.progress
+      ? {
+          ...activity.currentProgress,
+          ...input.progress,
+          progressText:
+            input.progress.progressText ?? activity.currentProgress.progressText,
+        }
+      : activity.currentProgress
+
     const updatedActivity: ActivityEntry = {
       ...activity,
-      status: input.listId ?? activity.status,
+      status: nextStatus,
       favorite: input.favorite ?? activity.favorite,
       manualNotes: input.manualNotes ?? activity.manualNotes,
-      currentProgress: input.progress
-        ? {
-            ...activity.currentProgress,
-            ...input.progress,
-            progressText:
-              input.progress.progressText ?? activity.currentProgress.progressText,
-          }
-        : activity.currentProgress,
+      currentProgress: normalizeEntryProgress(nextProgress, nextStatus, catalog),
       updatedAt: nowIso(),
     }
 

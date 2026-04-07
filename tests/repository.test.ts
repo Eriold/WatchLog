@@ -330,6 +330,41 @@ describe('WatchLogRepository', () => {
     expect(response.entry.activity.lastSource?.progressText).toBe('Ep 12/153')
   })
 
+  it('normalizes completed entries to total over total when the total is known', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const saved = await repository.addFromMetadata(
+      {
+        id: 'anilist:777',
+        title: "A Gentle Noble's Vacation Recommendation",
+        normalizedTitle: 'a gentle nobles vacation recommendation',
+        mediaType: 'anime',
+        genres: ['Fantasy'],
+        description: 'Mock',
+        episodeCount: 13,
+      },
+      'watching',
+    )
+
+    const updated = await repository.updateEntry({
+      catalogId: saved.entry.catalog.id,
+      listId: 'completed',
+      progress: {
+        episode: 9,
+        episodeTotal: 13,
+        progressText: '9/13',
+      },
+    })
+
+    expect(updated.entry?.activity.status).toBe('completed')
+    expect(updated.entry?.activity.currentProgress.episode).toBe(13)
+    expect(updated.entry?.activity.currentProgress.episodeTotal).toBe(13)
+    expect(updated.entry?.activity.currentProgress.progressText).toBe('13/13')
+  })
+
   it('merges explorer metadata into an existing alias-matched entry and promotes the English title', async () => {
     const repository = new WatchLogRepository(
       new MemoryStorageProvider(),
