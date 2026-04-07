@@ -17,6 +17,7 @@ import type {
 } from '../shared/types'
 import type { DetectionDebugInfo } from '../shared/messages'
 import {
+  type FaviconCandidate,
   cleanTitle,
   getFavicon,
   inferMediaType,
@@ -99,6 +100,7 @@ interface PopupInjectedPageSnapshot {
   href: string
   pageTitle: string
   bodyText: string
+  faviconCandidates: FaviconCandidate[]
   firstH1: string | null
   playerResponseTitle: string | null
   ogTitle: string | null
@@ -245,7 +247,10 @@ function getEntryProgressPercent(entry: LibraryEntry): number {
   )
 }
 
-function buildDetectionFromSnapshot(snapshot: PopupInjectedPageSnapshot): DetectionResult | null {
+function buildDetectionFromSnapshot(
+  snapshot: PopupInjectedPageSnapshot,
+  tabFaviconUrl?: string | null,
+): DetectionResult | null {
   const url = new URL(snapshot.href)
   const sourceSite = inferSourceSite(url)
   const rawTitle = resolveDetectedTitle(sourceSite, [
@@ -275,7 +280,10 @@ function buildDetectionFromSnapshot(snapshot: PopupInjectedPageSnapshot): Detect
     mediaType: inferMediaType(url, parsed, title),
     sourceSite,
     url: url.toString(),
-    favicon: getFavicon(url),
+    favicon: getFavicon(url, {
+      candidates: snapshot.faviconCandidates,
+      tabFaviconUrl,
+    }),
     pageTitle: snapshot.pageTitle,
     season: parsed.season,
     episode: parsed.episode,
@@ -292,6 +300,7 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
   debug: DetectionDebugInfo
 }> {
   try {
+    const tab = await chrome.tabs.get(tabId).catch(() => null)
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -313,6 +322,25 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
           const text = document.querySelector(selector)?.textContent?.trim()
           return text ? compact(text) : null
         }
+        const faviconCandidates = Array.from(document.querySelectorAll('link[rel]'))
+          .map((link) => ({
+            href: link.getAttribute('href')?.trim() ?? '',
+            rel: link.getAttribute('rel')?.trim() ?? '',
+            type: link.getAttribute('type')?.trim() ?? null,
+            sizes: link.getAttribute('sizes')?.trim() ?? null,
+          }))
+          .filter((candidate) => {
+            if (!candidate.href) {
+              return false
+            }
+
+            const rel = candidate.rel.toLowerCase()
+            return (
+              rel.includes('icon') ||
+              rel.includes('apple-touch-icon') ||
+              rel.includes('mask-icon')
+            )
+          })
 
         let firstH1: string | null = null
         for (const heading of document.querySelectorAll('h1')) {
@@ -327,6 +355,7 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
           href: window.location.href,
           pageTitle: document.title,
           bodyText: compact(document.body?.innerText ?? '').slice(0, 8000),
+          faviconCandidates,
           firstH1,
           playerResponseTitle: playerResponseTitle ? compact(playerResponseTitle) : null,
           ogTitle: getMeta('og:title'),
@@ -344,7 +373,9 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
     })
 
     const snapshot = (result?.result as PopupInjectedPageSnapshot | undefined) ?? null
-    const detection = snapshot ? buildDetectionFromSnapshot(snapshot) : null
+    const detection = snapshot
+      ? buildDetectionFromSnapshot(snapshot, tab?.favIconUrl ?? null)
+      : null
 
     return {
       detection,

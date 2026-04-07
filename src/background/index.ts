@@ -14,6 +14,7 @@ import type {
 import { STORAGE_KEYS } from '../shared/constants'
 import { createMetadataProvider } from '../shared/metadata/create-provider'
 import {
+  type FaviconCandidate,
   cleanTitle,
   getFavicon,
   inferMediaType,
@@ -69,6 +70,7 @@ interface InjectedPageSnapshot {
   href: string
   pageTitle: string
   bodyText: string
+  faviconCandidates: FaviconCandidate[]
   firstH1: string | null
   playerResponseTitle: string | null
   ogTitle: string | null
@@ -105,7 +107,10 @@ function inferSourceSite(url: URL): string {
   return hostname.replace(/^www\./i, '')
 }
 
-function buildDetectionFromSnapshot(snapshot: InjectedPageSnapshot): DetectionResult | null {
+function buildDetectionFromSnapshot(
+  snapshot: InjectedPageSnapshot,
+  tabFaviconUrl?: string | null,
+): DetectionResult | null {
   const url = new URL(snapshot.href)
   const sourceSite = inferSourceSite(url)
   const rawTitle = resolveDetectedTitle(sourceSite, [
@@ -135,7 +140,10 @@ function buildDetectionFromSnapshot(snapshot: InjectedPageSnapshot): DetectionRe
     mediaType: inferMediaType(url, parsed, title),
     sourceSite,
     url: url.toString(),
-    favicon: getFavicon(url),
+    favicon: getFavicon(url, {
+      candidates: snapshot.faviconCandidates,
+      tabFaviconUrl,
+    }),
     pageTitle: snapshot.pageTitle,
     season: parsed.season,
     episode: parsed.episode,
@@ -149,6 +157,7 @@ function buildDetectionFromSnapshot(snapshot: InjectedPageSnapshot): DetectionRe
 
 async function requestScriptedDetection(tabId: number): Promise<DetectionProbeResult> {
   try {
+    const tab = await chrome.tabs.get(tabId).catch(() => null)
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -170,6 +179,25 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
           const text = document.querySelector(selector)?.textContent?.trim()
           return text ? compact(text) : null
         }
+        const faviconCandidates = Array.from(document.querySelectorAll('link[rel]'))
+          .map((link) => ({
+            href: link.getAttribute('href')?.trim() ?? '',
+            rel: link.getAttribute('rel')?.trim() ?? '',
+            type: link.getAttribute('type')?.trim() ?? null,
+            sizes: link.getAttribute('sizes')?.trim() ?? null,
+          }))
+          .filter((candidate) => {
+            if (!candidate.href) {
+              return false
+            }
+
+            const rel = candidate.rel.toLowerCase()
+            return (
+              rel.includes('icon') ||
+              rel.includes('apple-touch-icon') ||
+              rel.includes('mask-icon')
+            )
+          })
 
         let firstH1: string | null = null
         for (const heading of document.querySelectorAll('h1')) {
@@ -184,6 +212,7 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
           href: window.location.href,
           pageTitle: document.title,
           bodyText: compact(document.body?.innerText ?? '').slice(0, 8000),
+          faviconCandidates,
           firstH1,
           playerResponseTitle: playerResponseTitle ? compact(playerResponseTitle) : null,
           ogTitle: getMeta('og:title'),
@@ -201,7 +230,10 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
     })
 
     const detection = result?.result
-      ? buildDetectionFromSnapshot(result.result as InjectedPageSnapshot)
+      ? buildDetectionFromSnapshot(
+          result.result as InjectedPageSnapshot,
+          tab?.favIconUrl ?? null,
+        )
       : null
 
     return {
@@ -318,7 +350,13 @@ chrome.runtime.onMessage.addListener((message: WatchLogMessage, sender, sendResp
     switch (message.type) {
       case 'watchlog/report-detection': {
         if (sender.tab?.id !== undefined) {
-          await setDetection(sender.tab.id, message.payload)
+          const detection = {
+            ...message.payload,
+            favicon: getFavicon(new URL(message.payload.url), {
+              tabFaviconUrl: sender.tab.favIconUrl ?? null,
+            }),
+          }
+          await setDetection(sender.tab.id, detection)
         }
         sendResponse({ ok: true })
         return

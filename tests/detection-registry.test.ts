@@ -228,4 +228,53 @@ describe('detectCurrentDocument', () => {
     expect(result?.progressLabel).toBe('Ep 4')
     expect(result?.mediaType).toBe('anime')
   })
+
+  it('prefers declared svg or png favicons over the default origin ico path', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <title>Episode 4 - Demo Show</title>
+          <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+          <link rel="icon" href="https://cdn.example.com/icons/demo-show.svg" type="image/svg+xml" sizes="any" />
+        </head>
+        <body>
+          <main>
+            <h1>Episode 4 - Demo Show</h1>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://stream.example.com/demo-show/episode-4',
+    )
+
+    expect(result?.favicon).toBe('https://cdn.example.com/icons/demo-show.svg')
+  })
+
+  it('keeps declared ico favicons when the site publishes them outside the origin root', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Episodio 4 - Niwatori Fighter - JKAnime</title>
+          <link rel="icon" href="https://cdn.jkdesa.com/assets3/css/img/favicon.ico?v=2.0.181" type="image/x-icon" />
+        </head>
+        <body>
+          <main>
+            <h1>Episodio 4 - Niwatori Fighter</h1>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://jkanime.net/niwatori-fighter/4/',
+    )
+
+    expect(result?.favicon).toBe('https://cdn.jkdesa.com/assets3/css/img/favicon.ico?v=2.0.181')
+  })
 })

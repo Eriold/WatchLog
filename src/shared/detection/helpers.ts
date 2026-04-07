@@ -1,4 +1,8 @@
 import type { DetectionContext, DetectionResult, MediaType } from '../types'
+import {
+  getFavicon as resolveFavicon,
+  type FaviconCandidate,
+} from '../utils/favicon'
 import { compactText, normalizeTitle } from '../utils/normalize'
 
 export function createDetectionContext(
@@ -170,8 +174,17 @@ export function isPlaceholderTitle(title: string, siteName: string): boolean {
   return placeholderTitles.has(normalizedTitle)
 }
 
-export function getFavicon(url: URL): string {
-  return `${url.origin}/favicon.ico`
+export { type FaviconCandidate }
+
+export function getFavicon(
+  url: URL,
+  options?: {
+    document?: Document
+    candidates?: FaviconCandidate[]
+    tabFaviconUrl?: string | null
+  },
+): string {
+  return resolveFavicon(url, options)
 }
 
 export function parseProgress(text: string): {
@@ -315,7 +328,7 @@ export function buildDetection(
     mediaType: inferMediaType(context.url, parsed, title),
     sourceSite: siteName,
     url: context.url.toString(),
-    favicon: getFavicon(context.url),
+    favicon: getFavicon(context.url, { document: context.document }),
     pageTitle: context.title,
     season: parsed.season,
     episode: parsed.episode,
