@@ -206,6 +206,8 @@ describe('WatchLogRepository', () => {
     expect(response.entry.catalog.backdrop).toBe('https://img.anilist.co/one-piece-banner.jpg')
     expect(response.entry.catalog.description).toBe('Real AniList metadata')
     expect(response.entry.catalog.episodeCount).toBe(1122)
+    expect(response.entry.activity.currentProgress.progressText).toBe('0/1122')
+    expect(response.entry.activity.currentProgress.episodeTotal).toBe(1122)
   })
 
   it('removes custom lists and reassigns their entries to library', async () => {
@@ -289,5 +291,41 @@ describe('WatchLogRepository', () => {
     expect(
       removed.snapshot.activity.some((entry) => entry.catalogId === saved.entry.catalog.id),
     ).toBe(false)
+  })
+
+  it('hydrates detected episode progress with metadata totals', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      metadata: {
+        id: 'anilist:500',
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'anime',
+        genres: ['Adventure'],
+        description: 'Mock',
+        episodeCount: 153,
+      },
+      detection: {
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'series',
+        sourceSite: 'AnimeAV1',
+        url: 'https://anime.example/dragon-ball/12',
+        favicon: 'https://anime.example/favicon.ico',
+        pageTitle: 'Dragon Ball Episodio 12',
+        episode: 12,
+        progressLabel: 'Ep 12',
+        confidence: 0.9,
+      },
+    })
+
+    expect(response.entry.activity.currentProgress.episodeTotal).toBe(153)
+    expect(response.entry.activity.currentProgress.progressText).toBe('Ep 12/153')
+    expect(response.entry.activity.lastSource?.progressText).toBe('Ep 12/153')
   })
 })

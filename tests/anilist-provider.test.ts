@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mapAniListMediaToMetadataCard, sanitizeAniListDescription } from '../src/shared/metadata/anilist-mappers'
+import {
+  getAniListAvailableEpisodeCount,
+  mapAniListMediaToMetadataCard,
+  sanitizeAniListDescription,
+} from '../src/shared/metadata/anilist-mappers'
 import { AniListMetadataProvider } from '../src/shared/metadata/anilist-provider'
 import { HybridMetadataProvider } from '../src/shared/metadata/hybrid-provider'
 import { MockMetadataProvider } from '../src/shared/metadata/mock-provider'
@@ -96,5 +100,35 @@ describe('AniList metadata integration', () => {
     const description = sanitizeAniListDescription('<p>Hello &amp; goodbye</p><br>World')
     expect(description).toContain('Hello & goodbye')
     expect(description).toContain('World')
+  })
+
+  it('uses published episodes for currently airing anime when total is not final yet', () => {
+    const publishedCount = getAniListAvailableEpisodeCount({
+      id: 200,
+      type: 'ANIME',
+      status: 'RELEASING',
+      episodes: null,
+      nextAiringEpisode: {
+        episode: 14,
+      },
+    })
+
+    expect(publishedCount).toBe(13)
+
+    const card = mapAniListMediaToMetadataCard({
+      id: 200,
+      type: 'ANIME',
+      status: 'RELEASING',
+      episodes: null,
+      nextAiringEpisode: {
+        episode: 14,
+      },
+      title: {
+        english: 'Ongoing Show',
+      },
+      description: 'Mock',
+    })
+
+    expect(card.episodeCount).toBe(13)
   })
 })

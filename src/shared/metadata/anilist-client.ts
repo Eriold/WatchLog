@@ -149,6 +149,7 @@ export class AniListClient {
             id
             type
             format
+            status
             episodes
             chapters
             duration
@@ -167,6 +168,9 @@ export class AniListClient {
               medium
             }
             bannerImage
+            nextAiringEpisode {
+              episode
+            }
           }
         }
       }
@@ -202,6 +206,7 @@ export class AniListClient {
           id
           type
           format
+          status
           episodes
           chapters
           duration
@@ -220,6 +225,9 @@ export class AniListClient {
             medium
           }
           bannerImage
+          nextAiringEpisode {
+            episode
+          }
         }
       }
     `

@@ -38,6 +38,91 @@ function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   }
 }
 
+function resolveEpisodeTotal(
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+): number | undefined {
+  const metadataTotal = metadata?.episodeCount
+
+  if (detection.episodeTotal !== undefined) {
+    return detection.episode !== undefined
+      ? Math.max(detection.episodeTotal, detection.episode)
+      : detection.episodeTotal
+  }
+
+  if (metadataTotal !== undefined) {
+    return detection.episode !== undefined
+      ? Math.max(metadataTotal, detection.episode)
+      : metadataTotal
+  }
+
+  return undefined
+}
+
+function resolveChapterTotal(
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+): number | undefined {
+  const metadataTotal = metadata?.chapterCount
+
+  if (detection.chapterTotal !== undefined) {
+    return detection.chapter !== undefined
+      ? Math.max(detection.chapterTotal, detection.chapter)
+      : detection.chapterTotal
+  }
+
+  if (metadataTotal !== undefined) {
+    return detection.chapter !== undefined
+      ? Math.max(metadataTotal, detection.chapter)
+      : metadataTotal
+  }
+
+  return undefined
+}
+
+function buildProgressLabel(
+  detection: DetectionResult,
+  episodeTotal?: number,
+  chapterTotal?: number,
+): string {
+  if (detection.season !== undefined && detection.episode !== undefined) {
+    return `S${detection.season} ${detection.episode}${episodeTotal ? `/${episodeTotal}` : ''}`
+  }
+
+  if (detection.episode !== undefined) {
+    return `Ep ${detection.episode}${episodeTotal ? `/${episodeTotal}` : ''}`
+  }
+
+  if (detection.chapter !== undefined) {
+    return `Cap ${detection.chapter}${chapterTotal ? `/${chapterTotal}` : ''}`
+  }
+
+  if (episodeTotal !== undefined) {
+    return `0/${episodeTotal}`
+  }
+
+  if (chapterTotal !== undefined) {
+    return `0/${chapterTotal}`
+  }
+
+  return detection.progressLabel
+}
+
+function hydrateDetectionWithMetadata(
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+): DetectionResult {
+  const episodeTotal = resolveEpisodeTotal(detection, metadata)
+  const chapterTotal = resolveChapterTotal(detection, metadata)
+
+  return {
+    ...detection,
+    episodeTotal,
+    chapterTotal,
+    progressLabel: buildProgressLabel(detection, episodeTotal, chapterTotal),
+  }
+}
+
 function createProgressState(detection: DetectionResult): ProgressState {
   return {
     season: detection.season,
@@ -121,14 +206,15 @@ export class WatchLogRepository {
     const metadata =
       input.metadata ??
       (await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
+    const hydratedDetection = hydrateDetectionWithMetadata(input.detection, metadata)
     const catalogMatch =
       snapshot.catalog.find((item) => {
         return (
-          item.normalizedTitle === input.detection.normalizedTitle &&
-          item.mediaType === (metadata?.mediaType ?? input.detection.mediaType)
+          item.normalizedTitle === hydratedDetection.normalizedTitle &&
+          item.mediaType === (metadata?.mediaType ?? hydratedDetection.mediaType)
         )
       }) ??
-      snapshot.catalog.find((item) => item.normalizedTitle === input.detection.normalizedTitle)
+      snapshot.catalog.find((item) => item.normalizedTitle === hydratedDetection.normalizedTitle)
 
     const catalog = catalogMatch
       ? {
@@ -146,16 +232,16 @@ export class WatchLogRepository {
           episodeCount: catalogMatch.episodeCount ?? metadata?.episodeCount,
           chapterCount: catalogMatch.chapterCount ?? metadata?.chapterCount,
         }
-      : createCatalogEntry(input.detection, metadata)
+      : createCatalogEntry(hydratedDetection, metadata)
 
-    const source = createSourceEntry(input.detection)
+    const source = createSourceEntry(hydratedDetection)
     const existingActivity = snapshot.activity.find((item) => item.catalogId === catalog.id)
     const updatedActivity: ActivityEntry = existingActivity
       ? {
           ...existingActivity,
           status: input.listId,
           favorite: input.favorite ?? existingActivity.favorite,
-          currentProgress: createProgressState(input.detection),
+          currentProgress: createProgressState(hydratedDetection),
           lastSource: source,
           sourceHistory: dedupeHistory(existingActivity.sourceHistory, source),
           updatedAt: nowIso(),
@@ -164,7 +250,7 @@ export class WatchLogRepository {
           catalogId: catalog.id,
           status: input.listId,
           favorite: input.favorite ?? false,
-          currentProgress: createProgressState(input.detection),
+          currentProgress: createProgressState(hydratedDetection),
           lastSource: source,
           sourceHistory: [source],
           manualNotes: '',
@@ -200,6 +286,8 @@ export class WatchLogRepository {
       url: '',
       favicon: '',
       pageTitle: item.title,
+      episodeTotal: item.episodeCount,
+      chapterTotal: item.chapterCount,
       progressLabel: item.mediaType === 'movie' ? 'Pendiente' : 'Sin progreso',
       confidence: 1,
     }

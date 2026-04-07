@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getActiveDetection, getLibrary, saveDetection } from '../shared/client'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
-import { toLibraryEntries } from '../shared/selectors'
+import { findMatchingLibraryEntry, toLibraryEntries } from '../shared/selectors'
 import { storageGet } from '../shared/storage/browser'
 import type {
   DetectionResult,
@@ -366,6 +366,7 @@ export function PopupApp() {
   const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [debug, setDebug] = useState<DetectionDebugInfo>(getEmptyDebug)
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
+  const [libraryHydrated, setLibraryHydrated] = useState(false)
   const [listOptions, setListOptions] = useState<WatchListDefinition[]>(() => mergePopupLists([]))
   const [selectedList, setSelectedList] = useState('library')
   const [favorite, setFavorite] = useState(false)
@@ -385,6 +386,7 @@ export function PopupApp() {
   const [analyzing, setAnalyzing] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
   const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
+  const [syncedDetectionSignature, setSyncedDetectionSignature] = useState<string | null>(null)
 
   useEffect(() => {
     document.title = t('titles.popup')
@@ -462,6 +464,7 @@ export function PopupApp() {
         }
 
         setSnapshot(response.snapshot)
+        setLibraryHydrated(true)
         setListOptions((current) => buildPopupListOptions(response.snapshot.lists, current))
       })
       .catch(() => {
@@ -469,6 +472,7 @@ export function PopupApp() {
           return
         }
 
+        setLibraryHydrated(true)
         setMessageState({ key: 'popup.analyzeFailed' })
       })
 
@@ -529,6 +533,7 @@ export function PopupApp() {
       const [response, lists] = await Promise.all([getLibrary(), readPopupLists()])
       setSnapshot(response.snapshot)
       setListOptions(buildPopupListOptions(response.snapshot.lists, lists))
+      setLibraryHydrated(true)
     }
 
     chrome.storage.onChanged.addListener(handleStorageChange)
@@ -555,8 +560,59 @@ export function PopupApp() {
   useEffect(() => {
     if (detection) {
       setCapturePoster(getRandomTemporaryPoster())
+      setSyncedDetectionSignature(null)
     }
   }, [detection])
+
+  const matchedLibraryEntry = detection
+    ? findMatchingLibraryEntry(snapshot, detection)
+    : null
+
+  useEffect(() => {
+    if (!detection || !libraryHydrated) {
+      return
+    }
+
+    const signature = `${targetTabId ?? 'unknown'}:${detection.normalizedTitle}:${detection.mediaType}`
+    if (syncedDetectionSignature === signature) {
+      return
+    }
+
+    if (matchedLibraryEntry) {
+      setSelectedList(matchedLibraryEntry.activity.status)
+      setFavorite(matchedLibraryEntry.activity.favorite)
+
+      if (
+        matchedLibraryEntry.catalog.title !== detection.title ||
+        matchedLibraryEntry.catalog.normalizedTitle !== detection.normalizedTitle ||
+        matchedLibraryEntry.catalog.mediaType !== detection.mediaType
+      ) {
+        setDetection((current) => {
+          if (!current) {
+            return current
+          }
+
+          return {
+            ...current,
+            title: matchedLibraryEntry.catalog.title,
+            normalizedTitle: matchedLibraryEntry.catalog.normalizedTitle,
+            mediaType: matchedLibraryEntry.catalog.mediaType,
+          }
+        })
+      }
+    } else {
+      setSelectedList('library')
+      setFavorite(false)
+    }
+
+    setSyncedDetectionSignature(signature)
+  }, [
+    detection,
+    libraryHydrated,
+    matchedLibraryEntry,
+    syncedDetectionSignature,
+    targetTabId,
+  ])
 
   async function handleRetryAnalysis(): Promise<void> {
     setAnalyzing(true)
@@ -622,7 +678,9 @@ export function PopupApp() {
     { count: recentEntries.length },
   )
   const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
-  const fallbackCapturePoster = detection ? capturePoster : '/mock-posters/poster-01.svg'
+  const fallbackCapturePoster = detection
+    ? matchedLibraryEntry?.catalog.poster ?? capturePoster
+    : '/mock-posters/poster-01.svg'
   const message = t(messageState.key, messageState.params)
 
   return (

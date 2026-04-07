@@ -7,6 +7,7 @@ export interface AniListMedia {
   id: number
   type: AniListMediaType
   format?: string | null
+  status?: string | null
   episodes?: number | null
   chapters?: number | null
   duration?: number | null
@@ -25,6 +26,9 @@ export interface AniListMedia {
     medium?: string | null
   } | null
   bannerImage?: string | null
+  nextAiringEpisode?: {
+    episode?: number | null
+  } | null
 }
 
 export function pickAniListTitle(media: AniListMedia): string {
@@ -77,10 +81,25 @@ export function mapAniListTypeToMediaType(type: AniListMediaType): MediaType {
   return 'manga'
 }
 
+export function getAniListAvailableEpisodeCount(media: AniListMedia): number | undefined {
+  if (typeof media.episodes === 'number' && media.episodes > 0) {
+    return media.episodes
+  }
+
+  const nextEpisode = media.nextAiringEpisode?.episode
+  if (typeof nextEpisode === 'number' && nextEpisode > 1) {
+    return nextEpisode - 1
+  }
+
+  return undefined
+}
+
 export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard {
   const title = pickAniListTitle(media)
   const score =
     typeof media.averageScore === 'number' ? Math.round(media.averageScore) / 10 : undefined
+  const resolvedEpisodeCount =
+    media.type === 'ANIME' ? getAniListAvailableEpisodeCount(media) : undefined
 
   return {
     id: `anilist:${media.id}`,
@@ -98,7 +117,7 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
     releaseYear: media.seasonYear ?? undefined,
     runtime: media.type === 'ANIME' ? media.duration ?? undefined : undefined,
     seasonCount: undefined,
-    episodeCount: media.type === 'ANIME' ? media.episodes ?? undefined : undefined,
+    episodeCount: resolvedEpisodeCount,
     chapterCount: media.type === 'MANGA' ? media.chapters ?? undefined : undefined,
     score,
   }
