@@ -1,0 +1,76 @@
+import type { MetadataCard } from '../types'
+import { AniListClient } from './anilist-client'
+import { mapAniListMediaToMetadataCard } from './anilist-mappers'
+import type { MetadataProvider } from './provider'
+
+function parseAniListId(id: string): number | null {
+  if (!id.startsWith('anilist:')) {
+    return null
+  }
+
+  const rawId = id.slice('anilist:'.length)
+  const parsed = Number.parseInt(rawId, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export class AniListMetadataProvider implements MetadataProvider {
+  private readonly client: AniListClient
+
+  constructor(client = new AniListClient()) {
+    this.client = client
+  }
+
+  async search(query?: string): Promise<MetadataCard[]> {
+    const trimmedQuery = query?.trim()
+    if (!trimmedQuery) {
+      return []
+    }
+
+    const [anime, manga] = await Promise.all([
+      this.client.searchMedia(trimmedQuery, 'ANIME'),
+      this.client.searchMedia(trimmedQuery, 'MANGA'),
+    ])
+
+    const seen = new Set<string>()
+    const items: MetadataCard[] = []
+
+    for (const media of [...anime, ...manga]) {
+      const card = mapAniListMediaToMetadataCard(media)
+      const dedupeKey = `${card.mediaType}:${card.normalizedTitle}`
+      if (seen.has(dedupeKey)) {
+        continue
+      }
+
+      seen.add(dedupeKey)
+      items.push(card)
+    }
+
+    return items
+  }
+
+  async findByNormalizedTitle(normalizedTitle: string): Promise<MetadataCard | undefined> {
+    const query = normalizedTitle.trim()
+    if (!query) {
+      return undefined
+    }
+
+    const cards = await this.search(query)
+    const direct = cards.find((item) => item.normalizedTitle === normalizedTitle)
+
+    if (direct) {
+      return direct
+    }
+
+    return cards.find((item) => normalizedTitle.includes(item.normalizedTitle))
+  }
+
+  async getById(id: string): Promise<MetadataCard | undefined> {
+    const parsedId = parseAniListId(id)
+    if (parsedId === null) {
+      return undefined
+    }
+
+    const media = await this.client.getMediaById(parsedId)
+    return media ? mapAniListMediaToMetadataCard(media) : undefined
+  }
+}

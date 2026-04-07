@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   lists: 'watchlog.lists',
   detectionByTab: 'watchlog.detectionByTab',
   locale: 'watchlog.locale',
+  anilistCache: 'watchlog.anilistCache',
 } as const
 
 export const SYSTEM_LISTS = [

@@ -5,6 +5,7 @@ import {
   clearList,
   getExplorer,
   getLibrary,
+  removeEntry,
   removeList,
   updateList,
   updateEntry,
@@ -144,6 +145,14 @@ function getProgressTotalValue(entry: LibraryEntry): string {
   }
 
   return '--'
+}
+
+function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n>['t']): string {
+  if (item.id.startsWith('anilist:')) {
+    return 'AniList'
+  }
+
+  return t('library.mockCatalog')
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -298,6 +307,11 @@ type ListModalState =
       input: string
     }
 
+type EntryDeleteState = {
+  catalogId: string
+  title: string
+}
+
 export function SidePanelApp() {
   const { locale, t } = useI18n()
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
@@ -313,6 +327,7 @@ export function SidePanelApp() {
   const [activeListSettingsId, setActiveListSettingsId] = useState<string | null>(null)
   const [listNameDraft, setListNameDraft] = useState('')
   const [listModalState, setListModalState] = useState<ListModalState | null>(null)
+  const [entryDeleteTarget, setEntryDeleteTarget] = useState<EntryDeleteState | null>(null)
   const [drafts, setDrafts] = useState<Record<string, { notes: string; progressText: string; listId: string; favorite: boolean }>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
@@ -325,6 +340,7 @@ export function SidePanelApp() {
       | 'library.listCreateFailed'
       | 'library.errorWithReason'
       | 'library.entryUpdated'
+      | 'library.entryDeleted'
       | 'library.explorerRefreshed'
       | 'library.addedToLibrary'
     params?: Record<string, string>
@@ -667,6 +683,42 @@ export function SidePanelApp() {
     setSelectedCatalogId(catalogId)
   }
 
+  function handleRequestDeleteEntry(): void {
+    if (!selectedEntry) return
+
+    setEntryDeleteTarget({
+      catalogId: selectedEntry.catalog.id,
+      title: selectedEntry.catalog.title,
+    })
+  }
+
+  async function handleConfirmDeleteEntry(): Promise<void> {
+    if (!entryDeleteTarget) return
+
+    try {
+      const response = await removeEntry(entryDeleteTarget.catalogId)
+      setSnapshot(response.snapshot)
+      setDrafts((current) => {
+        const next = { ...current }
+        delete next[entryDeleteTarget.catalogId]
+        return next
+      })
+      setSelectedCatalogId(null)
+      setEntryDeleteTarget(null)
+      setStatusMessageState({
+        key: 'library.entryDeleted',
+        params: { title: entryDeleteTarget.title },
+      })
+    } catch (error) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: error instanceof Error ? error.message : 'remove-entry-failed',
+        },
+      })
+    }
+  }
+
   async function handleSaveEntry(): Promise<void> {
     if (!selectedEntry || !selectedDraft) return
     const response = await updateEntry({
@@ -913,10 +965,10 @@ export function SidePanelApp() {
                     </div>
                   </div>
                   <div className="library-card-body">
-                    <div>
-                      <h3 className="library-card-title">{item.title}</h3>
-                      <p className="library-card-source">{t('library.mockCatalog')}</p>
-                    </div>
+                      <div>
+                        <h3 className="library-card-title">{item.title}</h3>
+                        <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
+                      </div>
                     <div className="genre-row">
                       {item.genres.slice(0, 3).map((genre) => (
                         <span className="genre-chip" key={genre}>{genre}</span>
@@ -1191,6 +1243,15 @@ export function SidePanelApp() {
                   )}
                 </div>
               </div>
+
+              <div className="field-card list-settings-section list-settings-danger">
+                <p className="list-settings-action-copy">
+                  {t('library.deleteItemConfirmBody', { title: selectedEntry.catalog.title })}
+                </p>
+                <button className="button danger" type="button" onClick={handleRequestDeleteEntry}>
+                  {t('library.deleteItem')}
+                </button>
+              </div>
             </div>
           </>
         ) : null}
@@ -1359,6 +1420,44 @@ export function SidePanelApp() {
                 {listModalState.mode === 'delete'
                   ? t('library.confirmDeleteList')
                   : t('library.confirmClearList')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {entryDeleteTarget ? (
+        <div className="library-modal-backdrop" role="presentation">
+          <div className="library-modal panel" role="dialog" aria-modal="true">
+            <div className="list-settings-header">
+              <div>
+                <p className="library-detail-kicker">{t('library.deleteItem')}</p>
+                <h3 className="list-settings-title">{t('library.deleteItemConfirmTitle')}</h3>
+              </div>
+              <button
+                className="list-settings-close"
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setEntryDeleteTarget(null)}
+              >
+                <CloseIcon className="list-settings-close-icon" />
+              </button>
+            </div>
+
+            <p className="library-detail-copy">
+              {t('library.deleteItemConfirmBody', { title: entryDeleteTarget.title })}
+            </p>
+
+            <div className="library-modal-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setEntryDeleteTarget(null)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button className="button danger" type="button" onClick={() => void handleConfirmDeleteEntry()}>
+                {t('library.confirmDeleteItem')}
               </button>
             </div>
           </div>

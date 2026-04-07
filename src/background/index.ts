@@ -1,4 +1,3 @@
-import { MockMetadataProvider } from '../shared/metadata/mock-provider'
 import type {
   ActiveDetectionResponse,
   AddListResponse,
@@ -7,11 +6,13 @@ import type {
   ExportActivityResponse,
   ExportCatalogResponse,
   LibraryResponse,
+  RemoveEntryResponse,
   SaveDetectionResponse,
   UpdateEntryResponse,
   WatchLogMessage,
 } from '../shared/messages'
 import { STORAGE_KEYS } from '../shared/constants'
+import { createMetadataProvider } from '../shared/metadata/create-provider'
 import {
   cleanTitle,
   getFavicon,
@@ -26,7 +27,7 @@ import { WatchLogRepository } from '../shared/storage/repository'
 import type { DetectionResult } from '../shared/types'
 import { normalizeTitle } from '../shared/utils/normalize'
 
-const metadataProvider = new MockMetadataProvider()
+const metadataProvider = createMetadataProvider()
 const repository = new WatchLogRepository(
   new LocalStorageProvider(),
   metadataProvider,
@@ -366,6 +367,11 @@ chrome.runtime.onMessage.addListener((message: WatchLogMessage, sender, sendResp
       }
       case 'watchlog/update-entry': {
         const response: UpdateEntryResponse = await repository.updateEntry(message.payload)
+        sendResponse(response)
+        return
+      }
+      case 'watchlog/remove-entry': {
+        const response: RemoveEntryResponse = await repository.removeEntry(message.payload.catalogId)
         sendResponse(response)
         return
       }

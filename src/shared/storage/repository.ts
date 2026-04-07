@@ -118,7 +118,9 @@ export class WatchLogRepository {
 
   async saveDetection(input: SaveDetectionInput): Promise<{ entry: LibraryEntry; snapshot: WatchLogSnapshot }> {
     const snapshot = await this.storageProvider.getSnapshot()
-    const metadata = await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle)
+    const metadata =
+      input.metadata ??
+      (await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
     const catalogMatch =
       snapshot.catalog.find((item) => {
         return (
@@ -205,6 +207,7 @@ export class WatchLogRepository {
     return this.saveDetection({
       detection,
       listId,
+      metadata: item,
     })
   }
 
@@ -243,6 +246,30 @@ export class WatchLogRepository {
 
     return {
       entry: buildEntry(nextSnapshot, input.catalogId),
+      snapshot: nextSnapshot,
+    }
+  }
+
+  async removeEntry(
+    catalogId: string,
+  ): Promise<{ removedCatalogId: string; snapshot: WatchLogSnapshot }> {
+    const snapshot = await this.storageProvider.getSnapshot()
+    const catalogExists = snapshot.catalog.some((item) => item.id === catalogId)
+
+    if (!catalogExists) {
+      throw new Error('Entry not found.')
+    }
+
+    const nextSnapshot: WatchLogSnapshot = {
+      ...snapshot,
+      catalog: snapshot.catalog.filter((item) => item.id !== catalogId),
+      activity: snapshot.activity.filter((item) => item.catalogId !== catalogId),
+    }
+
+    await this.storageProvider.saveSnapshot(nextSnapshot)
+
+    return {
+      removedCatalogId: catalogId,
       snapshot: nextSnapshot,
     }
   }

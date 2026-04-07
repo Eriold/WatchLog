@@ -179,6 +179,35 @@ describe('WatchLogRepository', () => {
     expect(response.entry.catalog.poster).toContain('WatchLogTemporaryPoster')
   })
 
+  it('preserves explicit explorer metadata when saving from a real provider', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const response = await repository.addFromMetadata(
+      {
+        id: 'anilist:21',
+        title: 'One Piece',
+        normalizedTitle: 'one piece',
+        mediaType: 'anime',
+        poster: 'https://img.anilist.co/one-piece.jpg',
+        backdrop: 'https://img.anilist.co/one-piece-banner.jpg',
+        genres: ['Adventure', 'Shounen'],
+        description: 'Real AniList metadata',
+        episodeCount: 1122,
+        score: 8.8,
+      },
+      'library',
+    )
+
+    expect(response.entry.catalog.id).toBe('anilist:21')
+    expect(response.entry.catalog.poster).toBe('https://img.anilist.co/one-piece.jpg')
+    expect(response.entry.catalog.backdrop).toBe('https://img.anilist.co/one-piece-banner.jpg')
+    expect(response.entry.catalog.description).toBe('Real AniList metadata')
+    expect(response.entry.catalog.episodeCount).toBe(1122)
+  })
+
   it('removes custom lists and reassigns their entries to library', async () => {
     const repository = new WatchLogRepository(
       new MemoryStorageProvider(),
@@ -234,5 +263,31 @@ describe('WatchLogRepository', () => {
     expect(renamed.list.label).toBe('Weekend Archive')
     expect(cleared.snapshot.activity.some((entry) => entry.status === custom.list.id)).toBe(false)
     expect(cleared.snapshot.catalog.some((entry) => entry.id === 'ghost-in-the-shell')).toBe(false)
+  })
+
+  it('removes an entry from catalog and activity', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const saved = await repository.addFromMetadata(
+      {
+        id: 'akira',
+        title: 'Akira',
+        normalizedTitle: 'akira',
+        mediaType: 'movie',
+        genres: ['Anime'],
+        description: 'Mock',
+      },
+      'library',
+    )
+
+    const removed = await repository.removeEntry(saved.entry.catalog.id)
+
+    expect(removed.snapshot.catalog.some((entry) => entry.id === saved.entry.catalog.id)).toBe(false)
+    expect(
+      removed.snapshot.activity.some((entry) => entry.catalogId === saved.entry.catalog.id),
+    ).toBe(false)
   })
 })

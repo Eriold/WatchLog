@@ -6,13 +6,14 @@ import type {
   ExportActivityResponse,
   ExportCatalogResponse,
   LibraryResponse,
+  RemoveEntryResponse,
   RemoveListResponse,
   SaveDetectionResponse,
   UpdateListResponse,
   UpdateEntryResponse,
   WatchLogMessage,
 } from './messages'
-import { MockMetadataProvider } from './metadata/mock-provider'
+import { createMetadataProvider } from './metadata/create-provider'
 import { LocalStorageProvider } from './storage/local-storage-provider'
 import { WatchLogRepository } from './storage/repository'
 import type {
@@ -23,7 +24,7 @@ import type {
 } from './types'
 import { sendRuntimeMessage } from './storage/browser'
 
-const metadataProvider = new MockMetadataProvider()
+const metadataProvider = createMetadataProvider()
 const repository = new WatchLogRepository(new LocalStorageProvider(), metadataProvider)
 
 export async function getActiveDetection(tabId?: number) {
@@ -68,6 +69,10 @@ export async function getExplorer(query?: string) {
 
 export async function updateEntry(payload: UpdateEntryInput) {
   return repository.updateEntry(payload) as Promise<UpdateEntryResponse>
+}
+
+export async function removeEntry(catalogId: string) {
+  return repository.removeEntry(catalogId) as Promise<RemoveEntryResponse>
 }
 
 export async function addList(label: string) {

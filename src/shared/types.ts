@@ -138,6 +138,7 @@ export interface SaveDetectionInput {
   detection: DetectionResult
   listId: string
   favorite?: boolean
+  metadata?: MetadataCard
 }
 
 export interface UpdateEntryInput {
