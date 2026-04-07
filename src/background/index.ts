@@ -54,6 +54,35 @@ async function removeDetection(tabId: number): Promise<void> {
   await storageSet(chrome.storage.session, STORAGE_KEYS.detectionByTab, map)
 }
 
+function getTabNavigationUrl(tab: chrome.tabs.Tab | null): string | null {
+  return tab?.url ?? tab?.pendingUrl ?? null
+}
+
+function normalizeDetectionUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.hash = ''
+    return parsed.toString()
+  } catch {
+    return url.trim()
+  }
+}
+
+function isDetectionCachedForCurrentTab(
+  detection: DetectionResult | null,
+  tabUrl: string | null,
+): boolean {
+  if (!detection) {
+    return false
+  }
+
+  if (!tabUrl) {
+    return true
+  }
+
+  return normalizeDetectionUrl(detection.url) === normalizeDetectionUrl(tabUrl)
+}
+
 async function getResolvedTab(tabId?: number): Promise<chrome.tabs.Tab | null> {
   if (tabId === undefined) {
     return getActiveTab()
@@ -292,12 +321,22 @@ async function resolveActiveDetection(
 ): Promise<ActiveDetectionResponse> {
   const tab = await getResolvedTab(targetTabId)
   const map = await getDetectionMap()
+  const tabUrl = getTabNavigationUrl(tab)
   let detection = tab?.id !== undefined ? map[String(tab.id)] ?? null : null
+  const hadStaleCachedDetection =
+    detection !== null && !isDetectionCachedForCurrentTab(detection, tabUrl)
   let debug: DetectionDebugInfo = {
     tabId: tab?.id ?? null,
-    tabUrl: tab?.url ?? tab?.pendingUrl ?? null,
+    tabUrl,
     source: 'none',
     reason: tab ? undefined : targetTabId !== undefined ? 'target-tab-not-found' : 'no-active-tab',
+  }
+
+  if (hadStaleCachedDetection) {
+    detection = null
+    if (tab?.id !== undefined) {
+      await removeDetection(tab.id)
+    }
   }
 
   if (!forceRefresh && isUsableDetection(detection)) {
@@ -316,7 +355,7 @@ async function resolveActiveDetection(
     debug = {
       ...debug,
       source: probe.source,
-      reason: probe.reason,
+      reason: probe.reason ?? (hadStaleCachedDetection ? 'cache-url-mismatch' : undefined),
     }
 
     if (detection) {
