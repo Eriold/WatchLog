@@ -204,6 +204,30 @@ function getTitleInitials(title: string): string {
   return tokens.map((token) => token[0]?.toUpperCase() ?? '').join('')
 }
 
+function getPopupOtherTitles(
+  primaryTitle: string,
+  ...aliasGroups: Array<string[] | undefined>
+): string[] {
+  const primaryKey = normalizeTitle(primaryTitle)
+  const seen = new Set<string>(primaryKey ? [primaryKey] : [])
+  const aliases: string[] = []
+
+  for (const group of aliasGroups) {
+    for (const candidate of group ?? []) {
+      const value = candidate.trim()
+      const normalized = normalizeTitle(value)
+      if (!value || !normalized || seen.has(normalized)) {
+        continue
+      }
+
+      seen.add(normalized)
+      aliases.push(value)
+    }
+  }
+
+  return aliases
+}
+
 function inferProgressPercent(
   progressText: string,
   episode?: number,
@@ -806,6 +830,13 @@ export function PopupApp() {
   const fallbackCapturePoster = detection
     ? matchedLibraryEntry?.catalog.poster ?? resolvedMetadata?.poster ?? capturePoster
     : '/mock-posters/poster-01.svg'
+  const popupOtherTitles = detection
+    ? getPopupOtherTitles(
+        detection.title,
+        matchedLibraryEntry?.catalog.aliases,
+        resolvedMetadata?.aliases,
+      )
+    : []
   const message = t(messageState.key, messageState.params)
 
   return (
@@ -888,21 +919,24 @@ export function PopupApp() {
                   </div>
 
                   <div className="popup-section">
-                    <label className="label popup-compact-label" htmlFor="title">
-                      {t('popup.titleLabel')}
-                    </label>
-                    <input
-                      id="title"
-                      className="field popup-title-field"
-                      value={detection.title}
-                      onChange={(event) =>
-                        setDetection({
-                          ...detection,
-                          title: event.target.value,
-                          normalizedTitle: normalizeTitle(event.target.value),
-                        })
-                      }
-                    />
+                    <p className="label popup-compact-label">{t('popup.titleLabel')}</p>
+                    <div className="popup-title-panel">
+                      <strong className="popup-title-value" title={detection.title}>
+                        {detection.title}
+                      </strong>
+                      {popupOtherTitles.length > 0 ? (
+                        <div className="popup-title-alias-block">
+                          <p className="popup-title-alias-label">{t('popup.otherTitles')}</p>
+                          <div className="popup-title-alias-list">
+                            {popupOtherTitles.map((title) => (
+                              <span key={title} className="popup-title-alias-chip" title={title}>
+                                {title}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="capture-progress-block">

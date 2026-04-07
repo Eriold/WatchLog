@@ -351,9 +351,59 @@ body {
   text-transform: uppercase;
 }
 
-.popup-title-field {
-  font-size: 0.96rem;
+.popup-title-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(171, 170, 177, 0.12);
+  background: rgba(10, 14, 24, 0.34);
+}
+
+.popup-title-value {
+  display: block;
+  color: #f7f5fd;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.popup-title-alias-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.popup-title-alias-label {
+  margin: 0;
+  color: #bfd1ff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.popup-title-alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.popup-title-alias-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(171, 170, 177, 0.14);
+  background: rgba(24, 25, 32, 0.72);
+  color: #d8def0;
+  font-size: 0.76rem;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .capture-progress-block,
