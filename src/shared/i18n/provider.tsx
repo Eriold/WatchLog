@@ -96,12 +96,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<I18nValue>(
     () => ({
+      browserLocale,
       locale,
       preference,
       setPreference,
       t,
     }),
-    [locale, preference, setPreference, t],
+    [browserLocale, locale, preference, setPreference, t],
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

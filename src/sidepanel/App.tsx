@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react'
+import { startTransition, useEffect, useState, type FormEvent } from 'react'
 import {
   addFromExplorer,
   addList,
@@ -738,6 +738,14 @@ export function SidePanelApp() {
     setStatusMessageState({ key: 'library.explorerRefreshed' })
   }
 
+  async function handleTopbarSearchSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+
+    if (selectedViewId === EXPLORER_TAB_ID) {
+      await handleExplorerSearch()
+    }
+  }
+
   async function handleExplorerAdd(item: MetadataCard): Promise<void> {
     const response = await addFromExplorer(item.id, 'library')
     setSnapshot(response.snapshot)
@@ -750,6 +758,7 @@ export function SidePanelApp() {
   }
 
   const statusMessage = t(statusMessageState.key, statusMessageState.params)
+  const showTopbarError = statusMessageState.key === 'library.errorWithReason'
 
   return (
     <div className="sidepanel-shell library-shell">
@@ -859,30 +868,39 @@ export function SidePanelApp() {
             <p className="library-topbar-subtitle">{getViewDescription(selectedViewId, t)}</p>
           </div>
           <div className="library-topbar-actions">
-            <label className="library-search">
-              <span>{t('common.search')}</span>
-              <input
-                value={selectedViewId === EXPLORER_TAB_ID ? explorerQuery : libraryQuery}
-                placeholder={
-                  selectedViewId === EXPLORER_TAB_ID
-                    ? t('library.searchExplorerPlaceholder')
-                    : t('library.searchLibraryPlaceholder')
-                }
-                onChange={(event) =>
-                  selectedViewId === EXPLORER_TAB_ID
-                    ? setExplorerQuery(event.target.value)
-                    : setLibraryQuery(event.target.value)
-                }
-              />
-            </label>
+            <form className="library-search-group" onSubmit={(event) => void handleTopbarSearchSubmit(event)}>
+              <label className="library-search">
+                <span>{t('common.search')}</span>
+                <input
+                  value={selectedViewId === EXPLORER_TAB_ID ? explorerQuery : libraryQuery}
+                  placeholder={
+                    selectedViewId === EXPLORER_TAB_ID
+                      ? t('library.searchExplorerPlaceholder')
+                      : t('library.searchLibraryPlaceholder')
+                  }
+                  onChange={(event) =>
+                    selectedViewId === EXPLORER_TAB_ID
+                      ? setExplorerQuery(event.target.value)
+                      : setLibraryQuery(event.target.value)
+                  }
+                />
+              </label>
+              {selectedViewId === EXPLORER_TAB_ID ? (
+                <button className="library-chip-button" type="submit">
+                  {t('library.searchAction')}
+                </button>
+              ) : null}
+            </form>
             <LanguageSelect className="library-language-select" compact />
-            {selectedViewId === EXPLORER_TAB_ID ? (
-              <button className="library-chip-button" type="button" onClick={() => void handleExplorerSearch()}>
-                {t('library.searchAction')}
-              </button>
-            ) : (
-              <span className="library-status-chip">{statusMessage}</span>
-            )}
+            {selectedViewId !== EXPLORER_TAB_ID ? (
+              showTopbarError ? (
+                <span className="library-status-chip">{statusMessage}</span>
+              ) : (
+                <span className="library-storage-badge" title={statusMessage}>
+                  {t('library.localStoredBadge')}
+                </span>
+              )
+            ) : null}
           </div>
         </header>
 

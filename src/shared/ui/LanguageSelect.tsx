@@ -8,8 +8,9 @@ interface LanguageSelectProps {
 }
 
 export function LanguageSelect({ className, compact = false }: LanguageSelectProps) {
-  const { preference, setPreference, t } = useI18n()
+  const { browserLocale, preference, setPreference, t } = useI18n()
   const selectId = useId()
+  const autoLabel = browserLocale === 'es' ? t('language.spanish') : t('language.english')
 
   return (
     <label className={className} htmlFor={selectId}>
@@ -20,7 +21,7 @@ export function LanguageSelect({ className, compact = false }: LanguageSelectPro
         value={preference}
         onChange={(event) => void setPreference(event.target.value as LocalePreference)}
       >
-        <option value="auto">{t('language.auto')}</option>
+        <option value="auto">{autoLabel}</option>
         <option value="en">{t('language.english')}</option>
         <option value="es">{t('language.spanish')}</option>
       </select>

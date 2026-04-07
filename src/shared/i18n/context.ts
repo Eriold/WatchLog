@@ -3,6 +3,7 @@ import type { LocalePreference, SupportedLocale, TranslationKey, TranslationPara
 
 export interface I18nValue {
   locale: SupportedLocale
+  browserLocale: SupportedLocale
   preference: LocalePreference
   setPreference: (next: LocalePreference) => Promise<void>
   t: (key: TranslationKey, params?: TranslationParams) => string
