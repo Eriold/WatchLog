@@ -11,7 +11,7 @@ import {
   updateEntry,
 } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
-import { toLibraryEntries } from '../shared/selectors'
+import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type {
   LibraryEntry,
@@ -154,6 +154,12 @@ function truncateDescription(text: string | undefined, maxLength = 150): string 
   if (!normalized) return ''
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
+}
+
+function getOtherTitles(
+  item: Pick<MetadataCard, 'aliases'> & Pick<LibraryEntry['catalog'], 'title'>,
+): string[] {
+  return (item.aliases ?? []).filter((title) => title.trim() && title !== item.title)
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -443,6 +449,7 @@ export function SidePanelApp() {
       const matchesQuery =
         !normalizedQuery ||
         entry.catalog.title.toLowerCase().includes(normalizedQuery) ||
+        (entry.catalog.aliases ?? []).some((alias) => alias.toLowerCase().includes(normalizedQuery)) ||
         entry.catalog.genres.some((genre) => genre.toLowerCase().includes(normalizedQuery)) ||
         (entry.activity.lastSource?.siteName ?? '').toLowerCase().includes(normalizedQuery)
       const matchesType = typeFilter === 'all' || entry.catalog.mediaType === typeFilter
@@ -469,6 +476,11 @@ export function SidePanelApp() {
     selectedExplorerId === null
       ? null
       : explorerItems.find((item) => item.id === selectedExplorerId) ?? null
+  const explorerMatchedEntries = new Map(
+    explorerItems.map((item) => [item.id, findMatchingLibraryEntryForMetadata(snapshot, item)]),
+  )
+  const selectedExplorerMatch =
+    selectedExplorerItem === null ? null : explorerMatchedEntries.get(selectedExplorerItem.id) ?? null
 
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? {
@@ -779,6 +791,13 @@ export function SidePanelApp() {
     })
   }
 
+  function handleOpenExistingExplorerEntry(entry: LibraryEntry): void {
+    setSelectedViewId(entry.activity.status)
+    setSelectedExplorerId(null)
+    setSelectedCatalogId(entry.catalog.id)
+    setStatusMessageState({ key: 'library.ready' })
+  }
+
   const statusMessage = t(statusMessageState.key, statusMessageState.params)
   const showTopbarError = statusMessageState.key === 'library.errorWithReason'
 
@@ -993,45 +1012,72 @@ export function SidePanelApp() {
 
           {selectedViewId === EXPLORER_TAB_ID ? (
             <section className="library-grid explorer-grid">
-              {explorerItems.map((item) => (
-                <article
-                  className={`library-card explorer-card ${selectedExplorerItem?.id === item.id ? 'is-selected' : ''}`}
-                  key={item.id}
-                  onClick={() => handleSelectExplorerItem(item.id)}
-                >
-                  <div className="library-card-poster-wrap">
-                    <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
-                    <span className="library-card-overlay" />
-                    <div className="library-card-badges">
-                      <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
-                        {getLocalizedMediaTypeLabel(item.mediaType, t)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="library-card-body">
-                      <div>
-                        <h3 className="library-card-title">{item.title}</h3>
-                        <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
+              {explorerItems.map((item) => {
+                const existingEntry = explorerMatchedEntries.get(item.id) ?? null
+
+                return (
+                  <article
+                    className={`library-card explorer-card ${selectedExplorerItem?.id === item.id ? 'is-selected' : ''}`}
+                    key={item.id}
+                    onClick={() => handleSelectExplorerItem(item.id)}
+                  >
+                    <div className="library-card-poster-wrap">
+                      <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
+                      <span className="library-card-overlay" />
+                      <div className="library-card-badges">
+                        <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
+                          {getLocalizedMediaTypeLabel(item.mediaType, t)}
+                        </span>
                       </div>
-                    <div className="genre-row">
-                      {item.genres.slice(0, 3).map((genre) => (
-                        <span className="genre-chip" key={genre}>{genre}</span>
-                      ))}
                     </div>
-                    <p className="library-card-description">{truncateDescription(item.description)}</p>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void handleExplorerAdd(item)
-                      }}
-                    >
-                      {t('library.addToLibrary')}
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="library-card-body">
+                        <div>
+                          <h3 className="library-card-title">{item.title}</h3>
+                          <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
+                        </div>
+                      <div className="genre-row">
+                        {item.genres.slice(0, 3).map((genre) => (
+                          <span className="genre-chip" key={genre}>{genre}</span>
+                        ))}
+                      </div>
+                      <p className="library-card-description">{truncateDescription(item.description)}</p>
+                      {existingEntry ? (
+                        <p
+                          className="explorer-existing-link"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleOpenExistingExplorerEntry(existingEntry)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              handleOpenExistingExplorerEntry(existingEntry)
+                            }
+                          }}
+                          role="link"
+                          tabIndex={0}
+                        >
+                          {t('library.addedInList', {
+                            label: getLocalizedListLabel(snapshot.lists, existingEntry.activity.status, t),
+                          })}
+                        </p>
+                      ) : (
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void handleExplorerAdd(item)
+                          }}
+                        >
+                          {t('library.addToLibrary')}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
             </section>
           ) : filteredEntries.length === 0 ? (
             <section className="library-empty-state panel">
@@ -1145,6 +1191,17 @@ export function SidePanelApp() {
                   })}
                 </p>
               </div>
+
+              {getOtherTitles(selectedEntry.catalog).length > 0 ? (
+                <div className="field-card">
+                  <p className="library-detail-kicker">{t('library.otherTitles')}</p>
+                  <div className="genre-row">
+                    {getOtherTitles(selectedEntry.catalog).map((title) => (
+                      <span className="genre-chip" key={title}>{title}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="entry-progress-module">
                 <div className="entry-progress-head">
@@ -1354,6 +1411,17 @@ export function SidePanelApp() {
                 </p>
               </div>
 
+              {getOtherTitles(selectedExplorerItem).length > 0 ? (
+                <div className="field-card">
+                  <p className="library-detail-kicker">{t('library.otherTitles')}</p>
+                  <div className="genre-row">
+                    {getOtherTitles(selectedExplorerItem).map((title) => (
+                      <span className="genre-chip" key={title}>{title}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="field-card">
                 <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
                 <p className="library-detail-copy">
@@ -1362,9 +1430,28 @@ export function SidePanelApp() {
               </div>
 
               <div className="entry-detail-actions-stack">
-                <button className="button" type="button" onClick={() => void handleExplorerAdd(selectedExplorerItem)}>
-                  {t('library.addToLibrary')}
-                </button>
+                {selectedExplorerMatch ? (
+                  <p
+                    className="explorer-existing-link explorer-existing-link-detail"
+                    onClick={() => handleOpenExistingExplorerEntry(selectedExplorerMatch)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleOpenExistingExplorerEntry(selectedExplorerMatch)
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                  >
+                    {t('library.addedInList', {
+                      label: getLocalizedListLabel(snapshot.lists, selectedExplorerMatch.activity.status, t),
+                    })}
+                  </p>
+                ) : (
+                  <button className="button" type="button" onClick={() => void handleExplorerAdd(selectedExplorerItem)}>
+                    {t('library.addToLibrary')}
+                  </button>
+                )}
               </div>
 
               <div className="field-card entry-technical-block">

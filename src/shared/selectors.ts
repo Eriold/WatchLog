@@ -1,9 +1,17 @@
 import type {
+  MetadataCard,
   DetectionResult,
   LibraryEntry,
   WatchListDefinition,
   WatchLogSnapshot,
 } from './types'
+import {
+  areMediaTypesCompatible,
+  getCatalogNormalizedTitles,
+  getMetadataExternalIds,
+  getMetadataNormalizedTitles,
+  hasNormalizedTitleOverlap,
+} from './metadata/matching'
 
 export function toLibraryEntries(snapshot: WatchLogSnapshot): LibraryEntry[] {
   return snapshot.activity
@@ -32,10 +40,11 @@ export function findMatchingLibraryEntry(
   detection: DetectionResult,
 ): LibraryEntry | null {
   const entries = toLibraryEntries(snapshot)
+  const detectionTitles = [detection.normalizedTitle]
   const exactMediaMatch = entries.find((entry) => {
     return (
-      entry.catalog.normalizedTitle === detection.normalizedTitle &&
-      entry.catalog.mediaType === detection.mediaType
+      areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
     )
   })
 
@@ -44,7 +53,7 @@ export function findMatchingLibraryEntry(
   }
 
   const exactTitleMatch = entries.find((entry) => {
-    return entry.catalog.normalizedTitle === detection.normalizedTitle
+    return hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
   })
 
   if (exactTitleMatch) {
@@ -53,9 +62,8 @@ export function findMatchingLibraryEntry(
 
   const fuzzyMediaMatch = entries.find((entry) => {
     return (
-      entry.catalog.mediaType === detection.mediaType &&
-      (entry.catalog.normalizedTitle.includes(detection.normalizedTitle) ||
-        detection.normalizedTitle.includes(entry.catalog.normalizedTitle))
+      areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
     )
   })
 
@@ -64,10 +72,34 @@ export function findMatchingLibraryEntry(
   }
 
   return (
+    entries.find((entry) =>
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles),
+    ) ?? null
+  )
+}
+
+export function findMatchingLibraryEntryForMetadata(
+  snapshot: WatchLogSnapshot,
+  metadata: MetadataCard,
+): LibraryEntry | null {
+  const entries = toLibraryEntries(snapshot)
+  const metadataExternalIds = getMetadataExternalIds(metadata)
+  const metadataTitles = getMetadataNormalizedTitles(metadata)
+
+  if (metadataExternalIds.anilist) {
+    const externalIdMatch = entries.find(
+      (entry) => entry.catalog.externalIds.anilist === metadataExternalIds.anilist,
+    )
+    if (externalIdMatch) {
+      return externalIdMatch
+    }
+  }
+
+  return (
     entries.find((entry) => {
       return (
-        entry.catalog.normalizedTitle.includes(detection.normalizedTitle) ||
-        detection.normalizedTitle.includes(entry.catalog.normalizedTitle)
+        areMediaTypesCompatible(entry.catalog.mediaType, metadata.mediaType) &&
+        hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), metadataTitles)
       )
     }) ?? null
   )

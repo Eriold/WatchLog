@@ -328,4 +328,50 @@ describe('WatchLogRepository', () => {
     expect(response.entry.activity.currentProgress.progressText).toBe('Ep 12/153')
     expect(response.entry.activity.lastSource?.progressText).toBe('Ep 12/153')
   })
+
+  it('merges explorer metadata into an existing alias-matched entry and promotes the English title', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'Odayaka Kizoku no Kyuuka no Susume',
+        normalizedTitle: 'odayaka kizoku no kyuuka no susume',
+        mediaType: 'anime',
+        sourceSite: 'JKAnime',
+        url: 'https://jkanime.net/odayaka-kizoku-no-kyuuka-no-susume/1/',
+        favicon: 'https://jkanime.net/favicon.ico',
+        pageTitle: 'Episodio 1 - Odayaka Kizoku no Kyuuka no Susume',
+        episode: 1,
+        progressLabel: 'Ep 1',
+        confidence: 0.84,
+      },
+    })
+
+    const response = await repository.addFromMetadata(
+      {
+        id: 'anilist:999',
+        title: "A Gentle Noble's Vacation Recommendation",
+        normalizedTitle: 'a gentle nobles vacation recommendation',
+        aliases: ['Odayaka Kizoku no Kyuuka no Susume', '穏やか貴族の休暇のすすめ。'],
+        mediaType: 'anime',
+        poster: 'https://img.anilist.co/gentle-noble.jpg',
+        genres: ['Fantasy'],
+        description: 'Mock',
+        episodeCount: 12,
+      },
+      'library',
+    )
+
+    expect(response.snapshot.catalog).toHaveLength(1)
+    expect(response.snapshot.activity).toHaveLength(1)
+    expect(response.entry.catalog.title).toBe("A Gentle Noble's Vacation Recommendation")
+    expect(response.entry.catalog.aliases).toContain('Odayaka Kizoku no Kyuuka no Susume')
+    expect(response.entry.catalog.externalIds.anilist).toBe('999')
+    expect(response.entry.activity.status).toBe('library')
+    expect(response.entry.activity.currentProgress.episodeTotal).toBe(12)
+  })
 })

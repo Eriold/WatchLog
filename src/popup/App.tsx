@@ -646,6 +646,8 @@ export function PopupApp() {
 
           const hydrated = hydrateDetectionWithMetadata(current, metadata)
           if (
+            current.title === metadata.title &&
+            current.normalizedTitle === metadata.normalizedTitle &&
             current.mediaType === hydrated.mediaType &&
             current.episodeTotal === hydrated.episodeTotal &&
             current.chapterTotal === hydrated.chapterTotal &&
@@ -654,7 +656,11 @@ export function PopupApp() {
             return current
           }
 
-          return hydrated
+          return {
+            ...hydrated,
+            title: metadata.title,
+            normalizedTitle: metadata.normalizedTitle,
+          }
         })
       })
       .catch(() => {

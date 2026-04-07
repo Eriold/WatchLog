@@ -682,6 +682,31 @@
   font-size: 0.84rem;
 }
 
+.explorer-existing-link {
+  padding-top: 11px;
+  text-align: center;
+  margin: 0;
+  color: #8fd0ff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.explorer-existing-link:hover,
+.explorer-existing-link:focus-visible {
+  color: #d4eeff;
+  transform: translateX(1px);
+  outline: none;
+}
+
+.explorer-existing-link-detail {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+}
+
 .library-card-description {
   display: -webkit-box;
   min-height: 3.8em;

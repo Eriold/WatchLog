@@ -15,7 +15,14 @@ import type {
   WatchLogSnapshot,
 } from '../types'
 import { hydrateDetectionWithMetadata } from '../metadata/detection-hydration'
-import { getMetadataNormalizedTitles } from '../metadata/matching'
+import {
+  areMediaTypesCompatible,
+  getCatalogNormalizedTitles,
+  getMetadataExternalIds,
+  getMetadataNormalizedTitles,
+  hasNormalizedTitleOverlap,
+  mergeAlternativeTitles,
+} from '../metadata/matching'
 import { normalizeTitle, slugify } from '../utils/normalize'
 import { nowIso } from '../utils/time'
 import type { StorageProvider } from './provider'
@@ -40,15 +47,96 @@ function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   }
 }
 
-function shouldPreserveDetectedTitle(
+function buildExternalIds(
+  existingExternalIds: Record<string, string>,
+  metadata?: MetadataCard,
+): Record<string, string> {
+  return {
+    ...existingExternalIds,
+    ...getMetadataExternalIds(metadata),
+  }
+}
+
+function getCatalogPrimaryTitle(
   detection: DetectionResult,
   metadata?: MetadataCard,
-): boolean {
-  if (!metadata) {
-    return false
+): string {
+  return metadata?.title ?? detection.title
+}
+
+function getCatalogPrimaryNormalizedTitle(
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+): string {
+  return metadata?.normalizedTitle ?? detection.normalizedTitle
+}
+
+function buildCatalogAliases(
+  primaryTitle: string,
+  existingCatalog?: CatalogEntry,
+  detection?: DetectionResult,
+  metadata?: MetadataCard,
+): string[] {
+  return mergeAlternativeTitles(primaryTitle, [
+    existingCatalog?.title,
+    ...(existingCatalog?.aliases ?? []),
+    detection?.title,
+    ...(metadata?.aliases ?? []),
+  ])
+}
+
+function findCatalogMatch(
+  snapshot: WatchLogSnapshot,
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+): CatalogEntry | undefined {
+  const metadataExternalIds = getMetadataExternalIds(metadata)
+  const targetTitles = metadata
+    ? getMetadataNormalizedTitles(metadata)
+    : [detection.normalizedTitle]
+  const targetMediaType = metadata?.mediaType ?? detection.mediaType
+
+  if (metadata?.id) {
+    const directIdMatch = snapshot.catalog.find((item) => item.id === metadata.id)
+    if (directIdMatch) {
+      return directIdMatch
+    }
   }
 
-  return getMetadataNormalizedTitles(metadata).includes(detection.normalizedTitle)
+  if (metadataExternalIds.anilist) {
+    const externalIdMatch = snapshot.catalog.find(
+      (item) => item.externalIds.anilist === metadataExternalIds.anilist,
+    )
+    if (externalIdMatch) {
+      return externalIdMatch
+    }
+  }
+
+  const compatibleTitleMatch = snapshot.catalog.find((item) => {
+    return (
+      areMediaTypesCompatible(item.mediaType, targetMediaType) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles)
+    )
+  })
+
+  if (compatibleTitleMatch) {
+    return compatibleTitleMatch
+  }
+
+  const detectionTitleMatch = snapshot.catalog.find((item) => {
+    return (
+      areMediaTypesCompatible(item.mediaType, detection.mediaType) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), [detection.normalizedTitle])
+    )
+  })
+
+  if (detectionTitleMatch) {
+    return detectionTitleMatch
+  }
+
+  return snapshot.catalog.find((item) =>
+    hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles),
+  )
 }
 
 function createProgressState(detection: DetectionResult): ProgressState {
@@ -65,14 +153,13 @@ function createProgressState(detection: DetectionResult): ProgressState {
 function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard): CatalogEntry {
   const timestamp = nowIso()
   const temporaryPoster = getRandomTemporaryPoster()
-  const preserveDetectedTitle = shouldPreserveDetectedTitle(detection, metadata)
+  const primaryTitle = getCatalogPrimaryTitle(detection, metadata)
 
   return {
     id: metadata?.id ?? `catalog-${slugify(detection.title)}-${Date.now()}`,
-    title: preserveDetectedTitle ? detection.title : metadata?.title ?? detection.title,
-    normalizedTitle: preserveDetectedTitle
-      ? detection.normalizedTitle
-      : metadata?.normalizedTitle ?? detection.normalizedTitle,
+    title: primaryTitle,
+    normalizedTitle: getCatalogPrimaryNormalizedTitle(detection, metadata),
+    aliases: buildCatalogAliases(primaryTitle, undefined, detection, metadata),
     mediaType: metadata?.mediaType ?? detection.mediaType,
     poster: metadata?.poster ?? temporaryPoster,
     backdrop: metadata?.backdrop,
@@ -83,7 +170,7 @@ function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard)
     seasonCount: metadata?.seasonCount,
     episodeCount: metadata?.episodeCount,
     chapterCount: metadata?.chapterCount,
-    externalIds: {},
+    externalIds: buildExternalIds({}, metadata),
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -138,19 +225,16 @@ export class WatchLogRepository {
       input.metadata ??
       (await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
     const hydratedDetection = hydrateDetectionWithMetadata(input.detection, metadata)
-    const catalogMatch =
-      (metadata ? snapshot.catalog.find((item) => item.id === metadata.id) : undefined) ??
-      snapshot.catalog.find((item) => {
-        return (
-          item.normalizedTitle === hydratedDetection.normalizedTitle &&
-          item.mediaType === (metadata?.mediaType ?? hydratedDetection.mediaType)
-        )
-      }) ??
-      snapshot.catalog.find((item) => item.normalizedTitle === hydratedDetection.normalizedTitle)
+    const catalogMatch = findCatalogMatch(snapshot, hydratedDetection, metadata)
+    const primaryTitle = getCatalogPrimaryTitle(hydratedDetection, metadata)
 
     const catalog = catalogMatch
       ? {
           ...catalogMatch,
+          title: primaryTitle,
+          normalizedTitle: getCatalogPrimaryNormalizedTitle(hydratedDetection, metadata),
+          aliases: buildCatalogAliases(primaryTitle, catalogMatch, hydratedDetection, metadata),
+          mediaType: metadata?.mediaType ?? catalogMatch.mediaType,
           updatedAt: nowIso(),
           poster:
             (catalogMatch.poster && !hasTemporaryPoster(catalogMatch.poster)
@@ -158,11 +242,15 @@ export class WatchLogRepository {
               : metadata?.poster) ??
             catalogMatch.poster ??
             getRandomTemporaryPoster(),
+          backdrop: catalogMatch.backdrop ?? metadata?.backdrop,
           genres: catalogMatch.genres.length > 0 ? catalogMatch.genres : metadata?.genres ?? [],
           description: catalogMatch.description ?? metadata?.description,
           runtime: catalogMatch.runtime ?? metadata?.runtime,
+          seasonCount: catalogMatch.seasonCount ?? metadata?.seasonCount,
           episodeCount: catalogMatch.episodeCount ?? metadata?.episodeCount,
           chapterCount: catalogMatch.chapterCount ?? metadata?.chapterCount,
+          releaseYear: catalogMatch.releaseYear ?? metadata?.releaseYear,
+          externalIds: buildExternalIds(catalogMatch.externalIds, metadata),
         }
       : createCatalogEntry(hydratedDetection, metadata)
 
@@ -448,7 +536,9 @@ export class WatchLogRepository {
     const normalizedQuery = normalizeTitle(query)
 
     return snapshot.catalog
-      .filter((catalog) => catalog.normalizedTitle.includes(normalizedQuery))
+      .filter((catalog) =>
+        getCatalogNormalizedTitles(catalog).some((title) => title.includes(normalizedQuery)),
+      )
       .map((catalog) => buildEntry(snapshot, catalog.id))
       .filter((entry): entry is LibraryEntry => Boolean(entry))
   }

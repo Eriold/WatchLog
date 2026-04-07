@@ -1,4 +1,4 @@
-import type { DetectionResult, MediaType, MetadataCard } from '../types'
+import type { CatalogEntry, DetectionResult, MediaType, MetadataCard } from '../types'
 import { normalizeTitle } from '../utils/normalize'
 
 const ANIME_HINT_PATTERN =
@@ -28,8 +28,83 @@ function uniqueNormalizedTitles(values: Array<string | undefined>): string[] {
   return items
 }
 
+function uniqueDisplayTitles(values: Array<string | undefined>, primaryTitle?: string): string[] {
+  const normalizedPrimary = primaryTitle ? normalizeTitle(primaryTitle) : ''
+  const seen = new Set<string>()
+  const items: string[] = []
+
+  for (const value of values) {
+    const trimmed = value?.trim()
+    if (!trimmed) {
+      continue
+    }
+
+    const normalized = normalizeTitle(trimmed)
+    if (!normalized || normalized === normalizedPrimary || seen.has(normalized)) {
+      continue
+    }
+
+    seen.add(normalized)
+    items.push(trimmed)
+  }
+
+  return items
+}
+
 export function getMetadataNormalizedTitles(item: MetadataCard): string[] {
   return uniqueNormalizedTitles([item.title, ...(item.aliases ?? [])])
+}
+
+export function getCatalogNormalizedTitles(item: CatalogEntry): string[] {
+  return uniqueNormalizedTitles([item.title, item.normalizedTitle, ...(item.aliases ?? [])])
+}
+
+export function mergeAlternativeTitles(
+  primaryTitle: string,
+  values: Array<string | undefined>,
+): string[] {
+  return uniqueDisplayTitles(values, primaryTitle)
+}
+
+export function areMediaTypesCompatible(left: MediaType, right: MediaType): boolean {
+  if (left === right) {
+    return true
+  }
+
+  const compatibilityPairs: Array<[MediaType, MediaType]> = [
+    ['anime', 'series'],
+    ['series', 'anime'],
+    ['novel', 'manga'],
+    ['manga', 'novel'],
+  ]
+
+  return compatibilityPairs.some(([source, target]) => source === left && target === right)
+}
+
+export function hasNormalizedTitleOverlap(left: string[], right: string[]): boolean {
+  return left.some((leftTitle) =>
+    right.some((rightTitle) => {
+      return (
+        leftTitle === rightTitle ||
+        leftTitle.includes(rightTitle) ||
+        rightTitle.includes(leftTitle)
+      )
+    }),
+  )
+}
+
+export function getMetadataExternalIds(item?: Pick<MetadataCard, 'id'> | null): Record<string, string> {
+  if (!item?.id) {
+    return {}
+  }
+
+  if (item.id.startsWith('anilist:')) {
+    return {
+      anilist: item.id.slice('anilist:'.length),
+    }
+  }
+
+  return {}
 }
 
 function collectDetectionHintText(detection: Pick<DetectionResult, 'sourceSite' | 'url'>): string {
