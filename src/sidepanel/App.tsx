@@ -95,16 +95,6 @@ function getListEntryCount(listId: string, entries: LibraryEntry[]): number {
   return entries.filter((entry) => entry.activity.status === listId).length
 }
 
-function getStatusTone(status: string, favorite: boolean): string {
-  if (favorite) return 'favorite'
-  if (status === 'watching') return 'watching'
-  if (status === 'completed') return 'completed'
-  if (status === 'paused') return 'paused'
-  if (status === 'library') return 'planned'
-  if (status === 'planned') return 'planned'
-  return 'default'
-}
-
 function getRemainingUnits(entry: LibraryEntry): number | null {
   const progress = entry.activity.currentProgress
 
@@ -153,6 +143,17 @@ function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n
   }
 
   return t('library.mockCatalog')
+}
+
+function getMediaTypeBadgeClass(mediaType: LibraryEntry['catalog']['mediaType']): string {
+  return `type-${mediaType}`
+}
+
+function truncateDescription(text: string | undefined, maxLength = 150): string {
+  const normalized = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -317,6 +318,7 @@ export function SidePanelApp() {
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
   const [selectedViewId, setSelectedViewId] = useState(ALL_TITLES_VIEW_ID)
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
+  const [selectedExplorerId, setSelectedExplorerId] = useState<string | null>(null)
   const [libraryQuery, setLibraryQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -463,6 +465,11 @@ export function SidePanelApp() {
             filteredEntries.some((candidate) => candidate.catalog.id === selectedCatalogId),
         ) ?? null
 
+  const selectedExplorerItem =
+    selectedExplorerId === null
+      ? null
+      : explorerItems.find((item) => item.id === selectedExplorerId) ?? null
+
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? {
         notes: selectedEntry.activity.manualNotes,
@@ -471,7 +478,7 @@ export function SidePanelApp() {
         favorite: selectedEntry.activity.favorite,
       }
     : null
-  const activeOverlay = activeListSettings ? 'list' : selectedEntry ? 'entry' : null
+  const activeOverlay = activeListSettings ? 'list' : selectedEntry || selectedExplorerItem ? 'entry' : null
 
   const typeOptions = Array.from(new Set(entries.map((entry) => entry.catalog.mediaType))).sort()
   const sourceOptions = Array.from(
@@ -680,7 +687,21 @@ export function SidePanelApp() {
 
   function handleSelectEntry(catalogId: string): void {
     setActiveListSettingsId(null)
+    setSelectedExplorerId(null)
     setSelectedCatalogId(catalogId)
+  }
+
+  function handleSelectExplorerItem(itemId: string): void {
+    setActiveListSettingsId(null)
+    setSelectedCatalogId(null)
+    setSelectedExplorerId(itemId)
+  }
+
+  function handleSelectView(viewId: string): void {
+    setActiveListSettingsId(null)
+    setSelectedCatalogId(null)
+    setSelectedExplorerId(null)
+    setSelectedViewId(viewId)
   }
 
   function handleRequestDeleteEntry(): void {
@@ -749,6 +770,7 @@ export function SidePanelApp() {
   async function handleExplorerAdd(item: MetadataCard): Promise<void> {
     const response = await addFromExplorer(item.id, 'library')
     setSnapshot(response.snapshot)
+    setSelectedExplorerId(null)
     setSelectedViewId('library')
     setSelectedCatalogId(response.entry.catalog.id)
     setStatusMessageState({
@@ -779,7 +801,7 @@ export function SidePanelApp() {
               key={view.id}
               className={`library-nav-button ${selectedViewId === view.id ? 'is-active' : ''}`}
               type="button"
-              onClick={() => setSelectedViewId(view.id)}
+              onClick={() => handleSelectView(view.id)}
             >
               <span className="library-nav-icon">
                 <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
@@ -810,7 +832,7 @@ export function SidePanelApp() {
                 <button
                   className="queue-list-main"
                   type="button"
-                  onClick={() => setSelectedViewId(list.id)}
+                  onClick={() => handleSelectView(list.id)}
                 >
                   <strong>{getLocalizedListDefinitionLabel(list, t)}</strong>
                   <span>
@@ -970,14 +992,18 @@ export function SidePanelApp() {
           </section>
 
           {selectedViewId === EXPLORER_TAB_ID ? (
-            <section className="library-grid">
+            <section className="library-grid explorer-grid">
               {explorerItems.map((item) => (
-                <article className="library-card explorer-card" key={item.id}>
+                <article
+                  className={`library-card explorer-card ${selectedExplorerItem?.id === item.id ? 'is-selected' : ''}`}
+                  key={item.id}
+                  onClick={() => handleSelectExplorerItem(item.id)}
+                >
                   <div className="library-card-poster-wrap">
                     <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
                     <span className="library-card-overlay" />
                     <div className="library-card-badges">
-                      <span className="media-badge tone-default">
+                      <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
                         {getLocalizedMediaTypeLabel(item.mediaType, t)}
                       </span>
                     </div>
@@ -992,8 +1018,15 @@ export function SidePanelApp() {
                         <span className="genre-chip" key={genre}>{genre}</span>
                       ))}
                     </div>
-                    <p className="library-card-description">{item.description}</p>
-                    <button className="button" type="button" onClick={() => void handleExplorerAdd(item)}>
+                    <p className="library-card-description">{truncateDescription(item.description)}</p>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleExplorerAdd(item)
+                      }}
+                    >
                       {t('library.addToLibrary')}
                     </button>
                   </div>
@@ -1009,7 +1042,6 @@ export function SidePanelApp() {
             <>
               <section className="library-grid">
                 {filteredEntries.map((entry) => {
-                  const tone = getStatusTone(entry.activity.status, entry.activity.favorite)
                   const progress = getProgressPercent(entry)
                   const platform = entry.activity.lastSource?.siteName ?? t('library.manualEntry')
 
@@ -1023,7 +1055,7 @@ export function SidePanelApp() {
                         <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
                         <span className="library-card-overlay" />
                         <div className="library-card-badges">
-                          <span className={`media-badge tone-${tone}`}>
+                          <span className={`media-badge ${getMediaTypeBadgeClass(entry.catalog.mediaType)}`}>
                             {getLocalizedMediaTypeLabel(entry.catalog.mediaType, t)}
                           </span>
                           {entry.activity.favorite ? <span className="favorite-badge">{t('common.favorite')}</span> : null}
@@ -1069,12 +1101,12 @@ export function SidePanelApp() {
         </main>
       </div>
 
-      <aside className={`entry-detail-drawer ${selectedEntry ? 'is-open' : ''}`}>
+      <aside className={`entry-detail-drawer ${selectedEntry || selectedExplorerItem ? 'is-open' : ''}`}>
         {selectedEntry && selectedDraft ? (
           <>
             <div className="entry-detail-header">
-                <div className="entry-detail-badges">
-                <span className={`media-badge tone-${getStatusTone(selectedEntry.activity.status, selectedDraft.favorite)}`}>
+              <div className="entry-detail-badges">
+                <span className={`media-badge ${getMediaTypeBadgeClass(selectedEntry.catalog.mediaType)}`}>
                   {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
                 </span>
                 <span className="media-badge tone-planned">
@@ -1156,6 +1188,13 @@ export function SidePanelApp() {
                     {t('library.resumeSource')}
                   </a>
                 ) : null}
+              </div>
+
+              <div className="field-card">
+                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+                <p className="library-detail-copy">
+                  {selectedEntry.catalog.description || t('library.noMetadataYet')}
+                </p>
               </div>
 
               <div className="entry-detail-grid">
@@ -1272,6 +1311,113 @@ export function SidePanelApp() {
               </div>
             </div>
           </>
+        ) : selectedExplorerItem ? (
+          <>
+            <div className="entry-detail-header">
+              <div className="entry-detail-badges">
+                <span className={`media-badge ${getMediaTypeBadgeClass(selectedExplorerItem.mediaType)}`}>
+                  {getLocalizedMediaTypeLabel(selectedExplorerItem.mediaType, t)}
+                </span>
+                <span className="media-badge tone-planned">{getExplorerSourceLabel(selectedExplorerItem, t)}</span>
+              </div>
+              <button
+                className="list-settings-close"
+                type="button"
+                aria-label={t('library.entryClosePanel')}
+                onClick={() => setSelectedExplorerId(null)}
+              >
+                <CloseIcon className="list-settings-close-icon" />
+              </button>
+            </div>
+
+            <div className="entry-detail-body">
+              <div className="entry-detail-poster-wrap">
+                <div className="entry-detail-poster-glow" />
+                <div className="entry-detail-poster-card">
+                  <img
+                    className="entry-detail-poster"
+                    src={selectedExplorerItem.poster ?? getTemporaryPoster(selectedExplorerItem.normalizedTitle)}
+                    alt={selectedExplorerItem.title}
+                  />
+                  <span className="entry-detail-status-pill">
+                    {getExplorerSourceLabel(selectedExplorerItem, t)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="entry-detail-title-block">
+                <h3 className="entry-detail-title">{selectedExplorerItem.title}</h3>
+                <p className="entry-detail-platform">
+                  {t('library.detectedOn', {
+                    site: getExplorerSourceLabel(selectedExplorerItem, t),
+                  })}
+                </p>
+              </div>
+
+              <div className="field-card">
+                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+                <p className="library-detail-copy">
+                  {selectedExplorerItem.description || t('library.noMetadataYet')}
+                </p>
+              </div>
+
+              <div className="entry-detail-actions-stack">
+                <button className="button" type="button" onClick={() => void handleExplorerAdd(selectedExplorerItem)}>
+                  {t('library.addToLibrary')}
+                </button>
+              </div>
+
+              <div className="field-card entry-technical-block">
+                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+                <div className="entry-technical-grid">
+                  <div>
+                    <span className="entry-technical-label">{t('library.metaSource')}</span>
+                    <strong>{getExplorerSourceLabel(selectedExplorerItem, t)}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.listItemCount')}</span>
+                    <strong>
+                      {selectedExplorerItem.genres.length > 0
+                        ? selectedExplorerItem.genres.join(', ')
+                        : t('library.noMetadataYet')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.releaseYear')}</span>
+                    <strong>{selectedExplorerItem.releaseYear ?? t('common.unknown')}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.scoreLabel')}</span>
+                    <strong>
+                      {selectedExplorerItem.score !== undefined
+                        ? String(selectedExplorerItem.score)
+                        : t('common.unknown')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.episodeCount')}</span>
+                    <strong>{selectedExplorerItem.episodeCount ?? t('common.unknown')}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.chapterCount')}</span>
+                    <strong>{selectedExplorerItem.chapterCount ?? t('common.unknown')}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.seasonCount')}</span>
+                    <strong>{selectedExplorerItem.seasonCount ?? t('common.unknown')}</strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.runtimeMinutes')}</span>
+                    <strong>
+                      {selectedExplorerItem.runtime !== undefined
+                        ? `${selectedExplorerItem.runtime} min`
+                        : t('common.unknown')}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         ) : null}
       </aside>
 
@@ -1281,6 +1427,7 @@ export function SidePanelApp() {
         onClick={() => {
           setActiveListSettingsId(null)
           setSelectedCatalogId(null)
+          setSelectedExplorerId(null)
         }}
       />
 
