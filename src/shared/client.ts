@@ -48,8 +48,20 @@ export async function saveDetection(payload: SaveDetectionInput) {
 }
 
 export async function resolveDetectionMetadata(detection: DetectionResult) {
-  const items = await metadataProvider.search(detection.title)
-  return pickBestMetadataMatch(items, detection.title, getDetectionMediaTypeHints(detection))
+  const queries = [detection.title]
+  if (detection.season !== undefined) {
+    queries.push(`${detection.title} ${detection.season}`)
+    queries.push(`${detection.title} season ${detection.season}`)
+  }
+
+  const results = await Promise.all(queries.map((query) => metadataProvider.search(query)))
+  const items = results.flat()
+  return pickBestMetadataMatch(
+    items,
+    detection.title,
+    getDetectionMediaTypeHints(detection),
+    detection.season,
+  )
 }
 
 export async function addFromExplorer(metadataId: string, listId: string) {

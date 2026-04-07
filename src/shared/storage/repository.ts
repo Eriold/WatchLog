@@ -28,12 +28,27 @@ import { nowIso } from '../utils/time'
 import type { StorageProvider } from './provider'
 import { getRandomTemporaryPoster, hasTemporaryPoster } from '../mock-posters'
 import { getResolvedProgressState } from '../progress'
+import {
+  areSeasonNumbersCompatible,
+  getCatalogSeasonNumber,
+  getDetectionSeasonNumber,
+  getMetadataSeasonNumber,
+} from '../season'
+
+function createUniqueId(prefix: string): string {
+  const randomSuffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
+  return `${prefix}-${randomSuffix}`
+}
 
 function createSourceEntry(detection: DetectionResult): SourceHistoryEntry {
   const detectedAt = nowIso()
 
   return {
-    id: `${slugify(detection.sourceSite)}-${Date.now()}`,
+    id: createUniqueId(slugify(detection.sourceSite)),
     siteName: detection.sourceSite,
     url: detection.url,
     favicon: detection.favicon,
@@ -96,6 +111,18 @@ function findCatalogMatch(
     ? getMetadataNormalizedTitles(metadata)
     : [detection.normalizedTitle]
   const targetMediaType = metadata?.mediaType ?? detection.mediaType
+  const targetSeasonNumber =
+    (metadata ? getMetadataSeasonNumber(metadata) : undefined) ??
+    getDetectionSeasonNumber(detection)
+  const getSnapshotCatalogSeasonNumber = (item: CatalogEntry): number | undefined => {
+    const activity = snapshot.activity.find((entry) => entry.catalogId === item.id)
+
+    return (
+      getCatalogSeasonNumber(item) ??
+      activity?.currentProgress.season ??
+      activity?.lastSource?.season
+    )
+  }
 
   if (metadata?.id) {
     const directIdMatch = snapshot.catalog.find((item) => item.id === metadata.id)
@@ -116,6 +143,7 @@ function findCatalogMatch(
   const compatibleTitleMatch = snapshot.catalog.find((item) => {
     return (
       areMediaTypesCompatible(item.mediaType, targetMediaType) &&
+      areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
       hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles)
     )
   })
@@ -127,6 +155,7 @@ function findCatalogMatch(
   const detectionTitleMatch = snapshot.catalog.find((item) => {
     return (
       areMediaTypesCompatible(item.mediaType, detection.mediaType) &&
+      areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
       hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), [detection.normalizedTitle])
     )
   })
@@ -135,9 +164,12 @@ function findCatalogMatch(
     return detectionTitleMatch
   }
 
-  return snapshot.catalog.find((item) =>
-    hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles),
-  )
+  return snapshot.catalog.find((item) => {
+    return (
+      areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles)
+    )
+  })
 }
 
 function createProgressState(detection: DetectionResult): ProgressState {
@@ -168,10 +200,11 @@ function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard)
   const primaryTitle = getCatalogPrimaryTitle(detection, metadata)
 
   return {
-    id: metadata?.id ?? `catalog-${slugify(detection.title)}-${Date.now()}`,
+    id: metadata?.id ?? createUniqueId(`catalog-${slugify(detection.title)}`),
     title: primaryTitle,
     normalizedTitle: getCatalogPrimaryNormalizedTitle(detection, metadata),
     aliases: buildCatalogAliases(primaryTitle, undefined, detection, metadata),
+    seasonNumber: getDetectionSeasonNumber(detection) ?? (metadata ? getMetadataSeasonNumber(metadata) : undefined),
     mediaType: metadata?.mediaType ?? detection.mediaType,
     score: metadata?.score,
     poster: metadata?.poster ?? temporaryPoster,
@@ -247,6 +280,10 @@ export class WatchLogRepository {
           title: primaryTitle,
           normalizedTitle: getCatalogPrimaryNormalizedTitle(hydratedDetection, metadata),
           aliases: buildCatalogAliases(primaryTitle, catalogMatch, hydratedDetection, metadata),
+          seasonNumber:
+            catalogMatch.seasonNumber ??
+            getDetectionSeasonNumber(hydratedDetection) ??
+            (metadata ? getMetadataSeasonNumber(metadata) : undefined),
           mediaType: metadata?.mediaType ?? catalogMatch.mediaType,
           score: metadata?.score ?? catalogMatch.score,
           updatedAt: nowIso(),

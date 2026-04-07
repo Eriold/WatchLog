@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { getResolvedProgressState } from '../src/shared/progress'
+import {
+  buildProgressStateFromControl,
+  getResolvedProgressState,
+  getStructuredProgressControl,
+} from '../src/shared/progress'
 
 describe('getResolvedProgressState', () => {
   it('forces completed episodic entries to total over total', () => {
@@ -35,6 +39,63 @@ describe('getResolvedProgressState', () => {
       episode: 13,
       episodeTotal: 13,
       progressText: '13/13',
+    })
+  })
+
+  it('builds structured episodic progress from the selected value', () => {
+    const control = getStructuredProgressControl({
+      season: 1,
+      episode: 3,
+      episodeTotal: 10,
+      progressText: '3/10',
+    })
+
+    expect(control).not.toBeNull()
+    expect(
+      buildProgressStateFromControl(
+        {
+          season: 1,
+          episode: 3,
+          episodeTotal: 10,
+          progressText: '3/10',
+        },
+        'watching',
+        control!,
+        6,
+      ),
+    ).toEqual({
+      season: 1,
+      episode: 6,
+      episodeTotal: 10,
+      progressText: '6/10',
+    })
+  })
+
+  it('forces structured progress to total over total in completed lists', () => {
+    const control = getStructuredProgressControl({
+      episode: 6,
+      episodeTotal: 10,
+      progressText: '6/10',
+    })
+
+    expect(control).not.toBeNull()
+    expect(
+      buildProgressStateFromControl(
+        {
+          episode: 6,
+          episodeTotal: 10,
+          progressText: '6/10',
+        },
+        'completed',
+        control!,
+        6,
+      ),
+    ).toEqual({
+      episode: 10,
+      episodeTotal: 10,
+      chapter: undefined,
+      chapterTotal: undefined,
+      progressText: '10/10',
     })
   })
 })

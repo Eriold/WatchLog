@@ -3,13 +3,16 @@ import { AniListMetadataProvider } from './anilist-provider'
 import { pickBestMetadataMatch } from './matching'
 import { MockMetadataProvider } from './mock-provider'
 import type { MetadataProvider } from './provider'
+import { getMetadataSeasonNumber } from '../season'
 
 function dedupeCards(items: MetadataCard[]): MetadataCard[] {
   const seen = new Set<string>()
   const result: MetadataCard[] = []
 
   for (const item of items) {
-    const key = `${item.mediaType}:${item.normalizedTitle}`
+    const key = `${item.mediaType}:${item.normalizedTitle}:${
+      getMetadataSeasonNumber(item) ?? 'none'
+    }`
     if (seen.has(key)) {
       continue
     }

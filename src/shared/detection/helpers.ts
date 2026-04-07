@@ -200,6 +200,7 @@ export function parseProgress(text: string): {
   const seasonEpisodePatterns = [
     /S(?:eason)?\s*(\d+)\s*[:\- ]?\s*E(?:p(?:isode)?)?\s*(\d+)(?:\s*\/\s*(\d+))?/i,
     /Season\s*(\d+)\s*Episode\s*(\d+)(?:\s*of\s*(\d+))?/i,
+    /(\d+)(?:st|nd|rd|th)\s+Season\s*Episode\s*(\d+)(?:\s*of\s*(\d+))?/i,
     /Temporada\s*(\d+)\s*(?:Cap[ií]tulo|Capitulo|Episodio)\s*(\d+)(?:\s*\/\s*(\d+))?/i,
   ]
 

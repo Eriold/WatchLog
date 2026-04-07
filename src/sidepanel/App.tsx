@@ -12,7 +12,20 @@ import {
 } from '../shared/client'
 import { EXPLORER_TAB_ID } from '../shared/constants'
 import { parseLibraryNavigationTarget } from '../shared/navigation'
-import { getResolvedProgressState } from '../shared/progress'
+import {
+  buildProgressStateFromControl,
+  getProgressCurrentValue as getProgressCurrentValueForState,
+  getProgressPercentForState,
+  getProgressTotalValue as getProgressTotalValueForState,
+  getResolvedProgressState,
+  getStructuredProgressControl,
+  getStructuredProgressText,
+} from '../shared/progress'
+import {
+  getCardSeasonCountBadge,
+  getLibraryEntrySeasonNumber,
+  getMetadataSeasonNumber,
+} from '../shared/season'
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type {
@@ -33,6 +46,14 @@ import './sidepanel.css'
 
 const ALL_TITLES_VIEW_ID = 'all-titles'
 const FAVORITES_VIEW_ID = 'favorites'
+
+type EntryDraft = {
+  notes: string
+  progressText: string
+  progressValue: number | null
+  listId: string
+  favorite: boolean
+}
 
 function getInitialSnapshot(): WatchLogSnapshot {
   return { catalog: [], activity: [], lists: [] }
@@ -95,25 +116,7 @@ function getViewDescription(
 }
 
 function getProgressPercent(entry: LibraryEntry): number {
-  if (entry.activity.status === 'completed') {
-    return 100
-  }
-
-  const progress = getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
-    episodeCount: entry.catalog.episodeCount,
-    chapterCount: entry.catalog.chapterCount,
-  })
-  if (progress.episode !== undefined && progress.episodeTotal && progress.episodeTotal > 0) {
-    return Math.min(100, Math.max(0, Math.round((progress.episode / progress.episodeTotal) * 100)))
-  }
-  if (progress.chapter !== undefined && progress.chapterTotal && progress.chapterTotal > 0) {
-    return Math.min(100, Math.max(0, Math.round((progress.chapter / progress.chapterTotal) * 100)))
-  }
-  const percentMatch = progress.progressText.match(/(\d{1,3})\s*%/)
-  if (percentMatch) {
-    return Math.min(100, Math.max(0, Number.parseInt(percentMatch[1], 10)))
-  }
-  return 0
+  return getProgressPercentForState(entry.activity.status, getEntryDisplayProgress(entry))
 }
 
 function getListEntryCount(listId: string, entries: LibraryEntry[]): number {
@@ -131,46 +134,47 @@ function getEntryDisplayProgressText(entry: LibraryEntry): string {
   return getEntryDisplayProgress(entry).progressText
 }
 
-function getRemainingUnits(entry: LibraryEntry): number | null {
+function createEntryDraft(entry: LibraryEntry): EntryDraft {
   const progress = getEntryDisplayProgress(entry)
+  const control = getStructuredProgressControl(progress)
 
-  if (progress.episode !== undefined && progress.episodeTotal) {
-    return Math.max(0, progress.episodeTotal - progress.episode)
+  return {
+    notes: entry.activity.manualNotes,
+    progressText: progress.progressText,
+    progressValue: control?.current ?? null,
+    listId: entry.activity.status,
+    favorite: entry.activity.favorite,
   }
-
-  if (progress.chapter !== undefined && progress.chapterTotal) {
-    return Math.max(0, progress.chapterTotal - progress.chapter)
-  }
-
-  return null
 }
 
-function getProgressCurrentValue(entry: LibraryEntry): string {
-  const progress = getEntryDisplayProgress(entry)
+function getDraftProgressState(entry: LibraryEntry, draft: EntryDraft) {
+  const baseProgress = getEntryDisplayProgress(entry)
+  const control = getStructuredProgressControl(baseProgress)
 
-  if (progress.episode !== undefined) {
-    return String(progress.episode).padStart(2, '0')
+  if (control) {
+    const value = draft.listId === 'completed' ? control.total : draft.progressValue ?? control.current
+    return buildProgressStateFromControl(baseProgress, draft.listId, control, value)
   }
 
-  if (progress.chapter !== undefined) {
-    return String(progress.chapter).padStart(2, '0')
-  }
-
-  return '--'
+  return getResolvedProgressState(
+    {
+      ...baseProgress,
+      progressText: draft.progressText,
+    },
+    draft.listId,
+    {
+      episodeCount: entry.catalog.episodeCount,
+      chapterCount: entry.catalog.chapterCount,
+    },
+  )
 }
 
-function getProgressTotalValue(entry: LibraryEntry): string {
-  const progress = getEntryDisplayProgress(entry)
+function getProgressCurrentValue(progress: ReturnType<typeof getEntryDisplayProgress>): string {
+  return getProgressCurrentValueForState(progress)
+}
 
-  if (progress.episodeTotal !== undefined) {
-    return String(progress.episodeTotal).padStart(2, '0')
-  }
-
-  if (progress.chapterTotal !== undefined) {
-    return String(progress.chapterTotal).padStart(2, '0')
-  }
-
-  return '--'
+function getProgressTotalValue(progress: ReturnType<typeof getEntryDisplayProgress>): string {
+  return getProgressTotalValueForState(progress)
 }
 
 function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n>['t']): string {
@@ -204,6 +208,22 @@ function formatCommunityScore(score?: number): string | null {
   }
 
   return score % 1 === 0 ? String(score) : score.toFixed(1)
+}
+
+function getExplorerCardSeasonBadge(item: MetadataCard): string | null {
+  return getCardSeasonCountBadge(
+    getMetadataSeasonNumber(item),
+    item.episodeCount,
+    item.chapterCount,
+  )
+}
+
+function getLibraryCardSeasonBadge(entry: LibraryEntry): string | null {
+  return getCardSeasonCountBadge(
+    getLibraryEntrySeasonNumber(entry),
+    entry.catalog.episodeCount ?? entry.activity.currentProgress.episodeTotal,
+    entry.catalog.chapterCount ?? entry.activity.currentProgress.chapterTotal,
+  )
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -382,7 +402,7 @@ export function SidePanelApp() {
   const [listNameDraft, setListNameDraft] = useState('')
   const [listModalState, setListModalState] = useState<ListModalState | null>(null)
   const [entryDeleteTarget, setEntryDeleteTarget] = useState<EntryDeleteState | null>(null)
-  const [drafts, setDrafts] = useState<Record<string, { notes: string; progressText: string; listId: string; favorite: boolean }>>({})
+  const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
       | 'library.loading'
@@ -539,13 +559,25 @@ export function SidePanelApp() {
     selectedExplorerItem === null ? null : explorerMatchedEntries.get(selectedExplorerItem.id) ?? null
 
   const selectedDraft = selectedEntry
-    ? drafts[selectedEntry.catalog.id] ?? {
-        notes: selectedEntry.activity.manualNotes,
-        progressText: getEntryDisplayProgressText(selectedEntry),
-        listId: selectedEntry.activity.status,
-        favorite: selectedEntry.activity.favorite,
-      }
+    ? drafts[selectedEntry.catalog.id] ?? createEntryDraft(selectedEntry)
     : null
+  const selectedEntryDisplayProgress =
+    selectedEntry && selectedDraft ? getDraftProgressState(selectedEntry, selectedDraft) : null
+  const selectedEntryProgressControl = selectedEntryDisplayProgress
+    ? getStructuredProgressControl(selectedEntryDisplayProgress)
+    : null
+  const selectedEntryProgressSelectValue =
+    selectedEntryProgressControl && selectedDraft
+      ? String(
+          selectedDraft.listId === 'completed'
+            ? selectedEntryProgressControl.total
+            : selectedDraft.progressValue ?? selectedEntryProgressControl.current,
+        )
+      : ''
+  const selectedEntryProgressPercent =
+    selectedEntry && selectedDraft && selectedEntryDisplayProgress
+      ? getProgressPercentForState(selectedDraft.listId, selectedEntryDisplayProgress)
+      : 0
   const activeOverlay = activeListSettings ? 'list' : selectedEntry || selectedExplorerItem ? 'entry' : null
 
   const typeOptions = Array.from(new Set(entries.map((entry) => entry.catalog.mediaType))).sort()
@@ -553,7 +585,7 @@ export function SidePanelApp() {
     new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown')),
   ).sort()
 
-  function updateDraft(patch: Partial<{ notes: string; progressText: string; listId: string; favorite: boolean }>): void {
+  function updateDraft(patch: Partial<EntryDraft>): void {
     if (!selectedEntry || !selectedDraft) return
     setDrafts((current) => ({
       ...current,
@@ -810,14 +842,43 @@ export function SidePanelApp() {
 
   async function handleSaveEntry(): Promise<void> {
     if (!selectedEntry || !selectedDraft) return
+    const currentProgress = getEntryDisplayProgress(selectedEntry)
+    const progressControl = getStructuredProgressControl(currentProgress)
+    const nextProgress = progressControl
+      ? buildProgressStateFromControl(
+          currentProgress,
+          selectedDraft.listId,
+          progressControl,
+          selectedDraft.listId === 'completed'
+            ? progressControl.total
+            : selectedDraft.progressValue ?? progressControl.current,
+        )
+      : getResolvedProgressState(
+          {
+            ...currentProgress,
+            progressText: selectedDraft.progressText,
+          },
+          selectedDraft.listId,
+          {
+            episodeCount: selectedEntry.catalog.episodeCount,
+            chapterCount: selectedEntry.catalog.chapterCount,
+          },
+        )
     const response = await updateEntry({
       catalogId: selectedEntry.catalog.id,
       listId: selectedDraft.listId,
       favorite: selectedDraft.favorite,
       manualNotes: selectedDraft.notes,
-      progress: { progressText: selectedDraft.progressText },
+      progress: nextProgress,
     })
     setSnapshot(response.snapshot)
+    const persistedEntry = response.entry
+    if (persistedEntry) {
+      setDrafts((current) => ({
+        ...current,
+        [persistedEntry.catalog.id]: createEntryDraft(persistedEntry),
+      }))
+    }
     setStatusMessageState({ key: 'library.entryUpdated' })
   }
 
@@ -1070,6 +1131,7 @@ export function SidePanelApp() {
             <section className="library-grid explorer-grid">
               {explorerItems.map((item) => {
                 const existingEntry = explorerMatchedEntries.get(item.id) ?? null
+                const seasonBadge = getExplorerCardSeasonBadge(item)
 
                 return (
                   <article
@@ -1080,6 +1142,9 @@ export function SidePanelApp() {
                     <div className="library-card-poster-wrap">
                       <img className="library-card-poster" src={item.poster ?? getTemporaryPoster(item.normalizedTitle)} alt={item.title} />
                       <span className="library-card-overlay" />
+                      {seasonBadge ? (
+                        <span className="library-card-season-badge">{seasonBadge}</span>
+                      ) : null}
                       <div className="library-card-badges">
                         <div className="library-card-badge-group">
                           <span className={`media-badge ${getMediaTypeBadgeClass(item.mediaType)}`}>
@@ -1151,6 +1216,7 @@ export function SidePanelApp() {
                 {filteredEntries.map((entry) => {
                   const progress = getProgressPercent(entry)
                   const platform = entry.activity.lastSource?.siteName ?? t('library.manualEntry')
+                  const seasonBadge = getLibraryCardSeasonBadge(entry)
 
                   return (
                     <article
@@ -1161,6 +1227,9 @@ export function SidePanelApp() {
                       <div className="library-card-poster-wrap">
                         <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
                         <span className="library-card-overlay" />
+                        {seasonBadge ? (
+                          <span className="library-card-season-badge">{seasonBadge}</span>
+                        ) : null}
                         <div className="library-card-badges">
                           <div className="library-card-badge-group">
                             <span className={`media-badge ${getMediaTypeBadgeClass(entry.catalog.mediaType)}`}>
@@ -1222,7 +1291,7 @@ export function SidePanelApp() {
                   {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
                 </span>
                 <span className="media-badge tone-planned">
-                  {getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}
+                  {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
                 </span>
               </div>
               <button
@@ -1244,7 +1313,7 @@ export function SidePanelApp() {
                     alt={selectedEntry.catalog.title}
                   />
                   <span className="entry-detail-status-pill">
-                    {getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}
+                    {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
                   </span>
                 </div>
               </div>
@@ -1274,25 +1343,15 @@ export function SidePanelApp() {
                   <div className="entry-progress-main">
                     <span className="entry-progress-label">{t('library.entryProgressModule')}</span>
                     <div className="entry-progress-numbers">
-                      <strong>{getProgressCurrentValue(selectedEntry)}</strong>
-                      <span>/ {getProgressTotalValue(selectedEntry)}</span>
-                    </div>
-                  </div>
-                  <div className="entry-progress-side">
-                    <span className="entry-progress-label">{t('popup.progressLabel')}</span>
-                    <div className="entry-progress-side-value">
-                      {getRemainingUnits(selectedEntry) !== null
-                        ? t('library.entryRemaining', {
-                            count: getRemainingUnits(selectedEntry) ?? 0,
-                          })
-                        : getEntryDisplayProgressText(selectedEntry)}
+                      <strong>{getProgressCurrentValue(selectedEntryDisplayProgress!)}</strong>
+                      <span>/ {getProgressTotalValue(selectedEntryDisplayProgress!)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="entry-progress-track">
                   <div
                     className="entry-progress-value"
-                    style={{ width: `${getProgressPercent(selectedEntry)}%` }}
+                    style={{ width: `${selectedEntryProgressPercent}%` }}
                   />
                 </div>
               </div>
@@ -1342,12 +1401,40 @@ export function SidePanelApp() {
                   <label className="label" htmlFor="entry-progress">
                     {t('popup.progressLabel')}
                   </label>
-                  <input
-                    id="entry-progress"
-                    className="field"
-                    value={selectedDraft.progressText}
-                    onChange={(event) => updateDraft({ progressText: event.target.value })}
-                  />
+                  {selectedEntryProgressControl ? (
+                    <select
+                      id="entry-progress"
+                      className="select"
+                      value={selectedEntryProgressSelectValue}
+                      disabled={selectedDraft.listId === 'completed'}
+                      onChange={(event) => {
+                        const value = Number.parseInt(event.target.value, 10)
+                        updateDraft({
+                          progressValue: Number.isNaN(value) ? selectedEntryProgressControl.current : value,
+                          progressText: getStructuredProgressText(
+                            Number.isNaN(value) ? selectedEntryProgressControl.current : value,
+                            selectedEntryProgressControl.total,
+                          ),
+                        })
+                      }}
+                    >
+                      {Array.from(
+                        { length: selectedEntryProgressControl.total + 1 },
+                        (_, index) => index,
+                      ).map((value) => (
+                        <option key={value} value={value}>
+                          {getStructuredProgressText(value, selectedEntryProgressControl.total)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id="entry-progress"
+                      className="field"
+                      value={selectedDraft.progressText}
+                      onChange={(event) => updateDraft({ progressText: event.target.value })}
+                    />
+                  )}
                 </div>
                 <div className="field-card field-card-wide">
                   <label className="label" htmlFor="entry-notes">
@@ -1367,11 +1454,11 @@ export function SidePanelApp() {
                 <div className="entry-technical-grid">
                   <div>
                     <span className="entry-technical-label">{t('library.primaryList')}</span>
-                    <strong>{getLocalizedListLabel(snapshot.lists, selectedEntry.activity.status, t)}</strong>
+                    <strong>{getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}</strong>
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('popup.progressLabel')}</span>
-                    <strong>{getEntryDisplayProgressText(selectedEntry)}</strong>
+                    <strong>{selectedEntryDisplayProgress!.progressText}</strong>
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('library.listItemCount')}</span>

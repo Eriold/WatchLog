@@ -48,6 +48,7 @@ export interface CatalogEntry {
   title: string
   normalizedTitle: string
   aliases?: string[]
+  seasonNumber?: number
   mediaType: MediaType
   score?: number
   poster?: string
@@ -113,6 +114,7 @@ export interface MetadataCard {
   title: string
   normalizedTitle: string
   aliases?: string[]
+  seasonNumber?: number
   mediaType: MediaType
   poster?: string
   backdrop?: string

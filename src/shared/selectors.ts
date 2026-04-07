@@ -12,6 +12,12 @@ import {
   getMetadataNormalizedTitles,
   hasNormalizedTitleOverlap,
 } from './metadata/matching'
+import {
+  areSeasonNumbersCompatible,
+  getDetectionSeasonNumber,
+  getLibraryEntrySeasonNumber,
+  getMetadataSeasonNumber,
+} from './season'
 
 export function toLibraryEntries(snapshot: WatchLogSnapshot): LibraryEntry[] {
   return snapshot.activity
@@ -41,9 +47,11 @@ export function findMatchingLibraryEntry(
 ): LibraryEntry | null {
   const entries = toLibraryEntries(snapshot)
   const detectionTitles = [detection.normalizedTitle]
+  const detectionSeasonNumber = getDetectionSeasonNumber(detection)
   const exactMediaMatch = entries.find((entry) => {
     return (
       areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
+      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
       hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
     )
   })
@@ -53,7 +61,10 @@ export function findMatchingLibraryEntry(
   }
 
   const exactTitleMatch = entries.find((entry) => {
-    return hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
+    return (
+      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
+      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
+    )
   })
 
   if (exactTitleMatch) {
@@ -63,6 +74,7 @@ export function findMatchingLibraryEntry(
   const fuzzyMediaMatch = entries.find((entry) => {
     return (
       areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
+      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
       hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
     )
   })
@@ -72,9 +84,12 @@ export function findMatchingLibraryEntry(
   }
 
   return (
-    entries.find((entry) =>
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles),
-    ) ?? null
+    entries.find((entry) => {
+      return (
+        areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
+        hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
+      )
+    }) ?? null
   )
 }
 
@@ -85,6 +100,7 @@ export function findMatchingLibraryEntryForMetadata(
   const entries = toLibraryEntries(snapshot)
   const metadataExternalIds = getMetadataExternalIds(metadata)
   const metadataTitles = getMetadataNormalizedTitles(metadata)
+  const metadataSeasonNumber = getMetadataSeasonNumber(metadata)
 
   if (metadataExternalIds.anilist) {
     const externalIdMatch = entries.find(
@@ -99,6 +115,7 @@ export function findMatchingLibraryEntryForMetadata(
     entries.find((entry) => {
       return (
         areMediaTypesCompatible(entry.catalog.mediaType, metadata.mediaType) &&
+        areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), metadataSeasonNumber) &&
         hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), metadataTitles)
       )
     }) ?? null

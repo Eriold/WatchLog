@@ -1,4 +1,5 @@
 import type { MediaType, MetadataCard } from '../types'
+import { inferSeasonNumberFromTitles } from '../season'
 import { normalizeTitle } from '../utils/normalize'
 
 export type AniListMediaType = 'ANIME' | 'MANGA'
@@ -126,6 +127,11 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
     title,
     normalizedTitle: normalizeTitle(title),
     aliases: getAniListAliases(media, title),
+    seasonNumber: inferSeasonNumberFromTitles([
+      media.title?.english?.trim(),
+      media.title?.romaji?.trim(),
+      media.title?.native?.trim(),
+    ]),
     mediaType: mapAniListTypeToMediaType(media.type),
     poster:
       media.coverImage?.extraLarge ??

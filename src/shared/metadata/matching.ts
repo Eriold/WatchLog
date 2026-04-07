@@ -1,4 +1,9 @@
 import type { CatalogEntry, DetectionResult, MediaType, MetadataCard } from '../types'
+import {
+  areSeasonNumbersCompatible,
+  getDetectionSeasonNumber,
+  getMetadataSeasonNumber,
+} from '../season'
 import { normalizeTitle } from '../utils/normalize'
 
 const ANIME_HINT_PATTERN =
@@ -186,6 +191,7 @@ export function pickBestMetadataMatch(
   items: MetadataCard[],
   query: string,
   preferredMediaTypes: MediaType[] = [],
+  preferredSeason?: number,
 ): MetadataCard | undefined {
   const normalizedQuery = normalizeTitle(query)
   if (!normalizedQuery) {
@@ -202,6 +208,15 @@ export function pickBestMetadataMatch(
       const mediaTypeScore = preferredMediaTypes.includes(item.mediaType)
         ? 30 - preferredMediaTypes.indexOf(item.mediaType) * 4
         : 0
+      const itemSeasonNumber = getMetadataSeasonNumber(item)
+      const seasonScore =
+        preferredSeason === undefined
+          ? 0
+          : itemSeasonNumber === preferredSeason
+            ? 24
+            : itemSeasonNumber === undefined
+              ? 0
+              : -36
       const providerBias =
         item.id.startsWith('anilist:') &&
         preferredMediaTypes.some((mediaType) => mediaType === 'anime' || mediaType === 'manga')
@@ -210,7 +225,7 @@ export function pickBestMetadataMatch(
 
       return {
         item,
-        score: titleScore + mediaTypeScore + providerBias,
+        score: titleScore + mediaTypeScore + seasonScore + providerBias,
         index,
       }
     })
@@ -226,4 +241,25 @@ export function pickBestMetadataMatch(
     })
 
   return ranked[0]?.score >= 60 ? ranked[0].item : undefined
+}
+
+export function areDetectionAndMetadataCompatible(
+  detection: Pick<DetectionResult, 'season' | 'title'>,
+  metadata: Pick<MetadataCard, 'seasonNumber' | 'title' | 'aliases'>,
+): boolean {
+  return areSeasonNumbersCompatible(
+    getDetectionSeasonNumber(detection),
+    getMetadataSeasonNumber(metadata),
+  )
+}
+
+export function areCatalogAndDetectionCompatible(
+  catalog: Pick<CatalogEntry, 'seasonNumber' | 'title' | 'aliases'>,
+  detection: Pick<DetectionResult, 'season' | 'title'>,
+  fallbackSeason?: number,
+): boolean {
+  return areSeasonNumbersCompatible(
+    catalog.seasonNumber,
+    getDetectionSeasonNumber(detection) ?? fallbackSeason,
+  )
 }

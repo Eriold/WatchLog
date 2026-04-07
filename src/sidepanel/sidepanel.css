@@ -486,6 +486,27 @@
   gap: 8px;
 }
 
+.library-card-season-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 44px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(5, 8, 16, 0.76);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(6px);
+}
+
 .library-card-badge-group {
   display: inline-flex;
   align-items: center;
@@ -960,13 +981,11 @@
 .entry-progress-head {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
 }
 
-.entry-progress-main,
-.entry-progress-side {
+.entry-progress-main {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -988,13 +1007,12 @@
 
 .entry-progress-numbers strong {
   color: #6bff8f;
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   line-height: 1;
   letter-spacing: -0.06em;
 }
 
-.entry-progress-numbers span,
-.entry-progress-side-value {
+.entry-progress-numbers span {
   color: #f7f5fd;
   font-size: 1rem;
 }
@@ -1238,8 +1256,7 @@
 
   .entry-detail-grid,
   .entry-technical-grid,
-  .list-settings-metrics,
-  .entry-progress-head {
+  .list-settings-metrics {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;

@@ -365,6 +365,50 @@ describe('WatchLogRepository', () => {
     expect(updated.entry?.activity.currentProgress.progressText).toBe('13/13')
   })
 
+  it('treats the first implicit season as season one so later seasons stay separate', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'KonoSuba',
+        normalizedTitle: 'konosuba',
+        mediaType: 'anime',
+        sourceSite: 'AnimeSite',
+        url: 'https://anime.example/konosuba/s1/1',
+        favicon: 'https://anime.example/favicon.ico',
+        pageTitle: 'KonoSuba Episode 1',
+        episode: 1,
+        progressLabel: 'Ep 1/10',
+        confidence: 0.9,
+      },
+    })
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'KonoSuba',
+        normalizedTitle: 'konosuba',
+        mediaType: 'anime',
+        sourceSite: 'AnimeSite',
+        url: 'https://anime.example/konosuba/s2/1',
+        favicon: 'https://anime.example/favicon.ico',
+        pageTitle: 'KonoSuba Season 2 Episode 1',
+        season: 2,
+        episode: 1,
+        progressLabel: 'S2 1/10',
+        confidence: 0.9,
+      },
+    })
+
+    expect(response.snapshot.catalog).toHaveLength(2)
+    expect(response.snapshot.activity).toHaveLength(2)
+    expect(response.snapshot.catalog.map((item) => item.seasonNumber).sort()).toEqual([1, 2])
+  })
+
   it('merges explorer metadata into an existing alias-matched entry and promotes the English title', async () => {
     const repository = new WatchLogRepository(
       new MemoryStorageProvider(),
