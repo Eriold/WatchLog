@@ -85,23 +85,31 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 16px;
-  border: 1px solid rgba(171, 170, 177, 0.14);
-  background: rgba(24, 25, 32, 0.82);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
   color: #bfd1ff;
   cursor: pointer;
   transition:
     transform 0.18s ease,
     background 0.18s ease,
-    border-color 0.18s ease;
+    color 0.18s ease;
 }
 
 .icon-surface-button:hover {
   transform: translateY(-1px);
-  background: rgba(30, 31, 38, 0.96);
-  border-color: rgba(105, 156, 255, 0.28);
+  background: rgba(24, 30, 46, 0.52);
+  color: #e0eaff;
+}
+
+.icon-surface-button:focus-visible {
+  outline: none;
+  background: rgba(24, 30, 46, 0.62);
+  color: #eef4ff;
+  box-shadow: 0 0 0 1px rgba(105, 156, 255, 0.34);
 }
 
 .popup-hero {
@@ -833,6 +841,11 @@ body {
 .action-icon {
   width: 17px;
   height: 17px;
+}
+
+.open-library-icon {
+  width: 28px;
+  height: 28px;
 }
 
 .play-icon {

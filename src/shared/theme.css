@@ -66,8 +66,8 @@ select {
 }
 
 .button {
-  border: 1px solid transparent;
-  border-radius: 14px;
+  border: 0px solid transparent;
+  border-radius: 8px;
   padding: 11px 14px;
   background: linear-gradient(135deg, #4338ca, #8b5cf6);
   color: white;
@@ -78,6 +78,7 @@ select {
 
 .button:hover {
   transform: translateY(-1px);
+  background: linear-gradient(135deg, #4a3eca, #9064f8);
 }
 
 .button:disabled {
@@ -176,8 +177,8 @@ select {
 }
 
 .brand-icon {
-  width: 28px;
-  height: 28px;
+  width: 48px;
+  height: 48px;
   border-radius: 8px;
   object-fit: contain;
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);

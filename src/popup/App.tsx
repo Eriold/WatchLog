@@ -189,16 +189,16 @@ function LaunchIcon() {
   )
 }
 
-function LibraryIcon() {
+function OpenInNewIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="action-icon">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="action-icon open-library-icon">
       <path
-        d="M5 5.75A2.75 2.75 0 0 1 7.75 3h8.5A2.75 2.75 0 0 1 19 5.75v12.5A2.75 2.75 0 0 1 16.25 21h-8.5A2.75 2.75 0 0 1 5 18.25V5.75Zm3 1.75h8m-8 4h8m-8 4h5"
+        d="M14 5h5v5m0-5-8.25 8.25M19 13v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"
         fill="none"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="1.8"
+        strokeWidth="1.9"
       />
     </svg>
   )
@@ -1262,7 +1262,8 @@ export function PopupApp() {
       <div className="panel popup-card">
         <header className="popup-topbar">
           <div className="brand-lockup popup-brand">
-            <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+            {/* <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" /> */}
+            <img className="brand-icon" src="/icons/android-chrome-192x192.png" alt="WatchLog logo" />
             <div>
               <p className="tiny popup-brand-kicker">{t('common.appName')}</p>
               <strong className="popup-brand-name">{t('popup.quickPopup')}</strong>
@@ -1280,7 +1281,7 @@ export function PopupApp() {
               title={t('popup.openFullLibrary')}
               onClick={() => void openLibrary()}
             >
-              <LibraryIcon />
+              <OpenInNewIcon />
             </button>
           </div>
         </header>
