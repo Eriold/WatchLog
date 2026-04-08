@@ -54,8 +54,13 @@ export const translations = {
     'popup.completePercent': '{percent}% complete',
     'popup.capturedLink': 'Captured link',
     'popup.saveSuggestion': 'Save suggestion',
+    'popup.updateSavedEntry': 'Update saved entry',
     'popup.addedInList': 'Added in {label}',
     'popup.openFullLibrary': 'Open full library',
+    'popup.posterUnofficial': 'No official',
+    'popup.posterMetadataMissing': 'Official AniList poster or metadata was not recovered for this title yet.',
+    'popup.posterPickerHint':
+      'If the page exposes multiple images, choose the closest temporary poster. More vertical options are prioritized.',
     'popup.noSignal': 'No signal',
     'popup.detectionUnavailable': 'Detection unavailable for this tab right now.',
     'popup.detectionHint':
@@ -278,8 +283,14 @@ export const translations = {
     'popup.completePercent': '{percent}% completado',
     'popup.capturedLink': 'Enlace capturado',
     'popup.saveSuggestion': 'Guardar sugerencia',
+    'popup.updateSavedEntry': 'Actualizar entrada guardada',
     'popup.addedInList': 'Agregado en {label}',
     'popup.openFullLibrary': 'Abrir biblioteca completa',
+    'popup.posterUnofficial': 'No oficial',
+    'popup.posterMetadataMissing':
+      'La informacion oficial del poster o metadata aun no se recupero desde AniList para este titulo.',
+    'popup.posterPickerHint':
+      'Si el sitio expone varias imagenes, elige la mas cercana como poster temporal. Priorizamos las mas verticales.',
     'popup.noSignal': 'Sin señal',
     'popup.detectionUnavailable': 'La detección no está disponible para esta pestaña ahora mismo.',
     'popup.detectionHint':

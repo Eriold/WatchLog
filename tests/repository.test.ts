@@ -177,6 +177,34 @@ describe('WatchLogRepository', () => {
     })
 
     expect(response.entry.catalog.poster).toContain('WatchLogTemporaryPoster')
+    expect(response.entry.catalog.posterKind).toBe('temporary')
+  })
+
+  it('persists a selected unofficial poster when metadata is unavailable', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      posterOverride: 'https://mangadex.org/covers/series/cover.jpg',
+      detection: {
+        title: 'Signal Unknown',
+        normalizedTitle: 'signal unknown',
+        mediaType: 'manga',
+        sourceSite: 'mangadex.org',
+        url: 'https://mangadex.org/chapter/example',
+        favicon: 'https://mangadex.org/favicon.ico',
+        pageTitle: 'Signal Unknown Ch. 42',
+        chapter: 42,
+        progressLabel: 'Cap 42',
+        confidence: 0.65,
+      },
+    })
+
+    expect(response.entry.catalog.poster).toBe('https://mangadex.org/covers/series/cover.jpg')
+    expect(response.entry.catalog.posterKind).toBe('unofficial')
   })
 
   it('preserves explicit explorer metadata when saving from a real provider', async () => {
@@ -209,6 +237,7 @@ describe('WatchLogRepository', () => {
 
     expect(response.entry.catalog.id).toBe('anilist:21')
     expect(response.entry.catalog.poster).toBe('https://img.anilist.co/one-piece.jpg')
+    expect(response.entry.catalog.posterKind).toBe('official')
     expect(response.entry.catalog.backdrop).toBe('https://img.anilist.co/one-piece-banner.jpg')
     expect(response.entry.catalog.description).toBe('Real AniList metadata')
     expect(response.entry.catalog.publicationStatus).toBe('RELEASING')
@@ -340,6 +369,59 @@ describe('WatchLogRepository', () => {
     expect(response.entry.activity.currentProgress.episodeTotal).toBe(153)
     expect(response.entry.activity.currentProgress.progressText).toBe('Ep 12/153')
     expect(response.entry.activity.lastSource?.progressText).toBe('Ep 12/153')
+  })
+
+  it('replaces an unofficial stored poster when official metadata becomes available later', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    await repository.saveDetection({
+      listId: 'watching',
+      posterOverride: 'https://mangadex.org/covers/series/cover.jpg',
+      detection: {
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'manga',
+        sourceSite: 'mangadex.org',
+        url: 'https://mangadex.org/chapter/dragon-ball-1',
+        favicon: 'https://mangadex.org/favicon.ico',
+        pageTitle: 'Dragon Ball Ch. 1',
+        chapter: 1,
+        progressLabel: 'Cap 1',
+        confidence: 0.8,
+      },
+    })
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      metadata: {
+        id: 'anilist:500',
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'manga',
+        poster: 'https://img.anilist.co/dragon-ball.jpg',
+        genres: ['Adventure'],
+        description: 'Official metadata',
+        chapterCount: 519,
+      },
+      detection: {
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'manga',
+        sourceSite: 'mangadex.org',
+        url: 'https://mangadex.org/chapter/dragon-ball-1',
+        favicon: 'https://mangadex.org/favicon.ico',
+        pageTitle: 'Dragon Ball Ch. 1',
+        chapter: 1,
+        progressLabel: 'Cap 1',
+        confidence: 0.9,
+      },
+    })
+
+    expect(response.entry.catalog.poster).toBe('https://img.anilist.co/dragon-ball.jpg')
+    expect(response.entry.catalog.posterKind).toBe('official')
   })
 
   it('normalizes completed entries to total over total when the total is known', async () => {

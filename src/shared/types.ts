@@ -16,6 +16,8 @@ export type PublicationStatus =
   | 'CANCELLED'
   | 'HIATUS'
 
+export type PosterKind = 'official' | 'unofficial' | 'temporary'
+
 export interface FuzzyDate {
   year?: number
   month?: number
@@ -65,6 +67,7 @@ export interface CatalogEntry {
   mediaType: MediaType
   score?: number
   poster?: string
+  posterKind?: PosterKind
   backdrop?: string
   genres: string[]
   description?: string
@@ -163,6 +166,7 @@ export interface SaveDetectionInput {
   listId: string
   favorite?: boolean
   metadata?: MetadataCard
+  posterOverride?: string
 }
 
 export interface UpdateEntryInput {

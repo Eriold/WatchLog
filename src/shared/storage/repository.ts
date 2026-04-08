@@ -7,6 +7,7 @@ import type {
   ExportCatalogPayload,
   LibraryEntry,
   MetadataCard,
+  PosterKind,
   ProgressState,
   SaveDetectionInput,
   SourceHistoryEntry,
@@ -192,10 +193,70 @@ function normalizeEntryProgress(
   })
 }
 
-function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard): CatalogEntry {
+function getCatalogPosterKind(
+  catalog?: Pick<CatalogEntry, 'poster' | 'posterKind'> | null,
+): PosterKind | undefined {
+  if (!catalog?.poster) {
+    return undefined
+  }
+
+  if (catalog.posterKind) {
+    return catalog.posterKind
+  }
+
+  return hasTemporaryPoster(catalog.poster) ? 'temporary' : 'official'
+}
+
+function resolveCatalogPoster(
+  input: {
+    metadata?: MetadataCard
+    existingCatalog?: CatalogEntry
+    posterOverride?: string
+  },
+): { poster: string; posterKind: PosterKind } {
+  if (input.metadata?.poster) {
+    return {
+      poster: input.metadata.poster,
+      posterKind: 'official',
+    }
+  }
+
+  const existingPosterKind = getCatalogPosterKind(input.existingCatalog)
+  if (input.existingCatalog?.poster && existingPosterKind === 'official') {
+    return {
+      poster: input.existingCatalog.poster,
+      posterKind: 'official',
+    }
+  }
+
+  if (input.posterOverride) {
+    return {
+      poster: input.posterOverride,
+      posterKind: 'unofficial',
+    }
+  }
+
+  if (input.existingCatalog?.poster && existingPosterKind) {
+    return {
+      poster: input.existingCatalog.poster,
+      posterKind: existingPosterKind,
+    }
+  }
+
+  return {
+    poster: getRandomTemporaryPoster(),
+    posterKind: 'temporary',
+  }
+}
+
+function createCatalogEntry(
+  detection: DetectionResult,
+  metadata?: MetadataCard,
+  posterOverride?: string,
+): CatalogEntry {
   const timestamp = nowIso()
-  const temporaryPoster = getRandomTemporaryPoster()
   const primaryTitle = getCatalogPrimaryTitle(detection, metadata)
+  const poster = resolveCatalogPoster({ metadata, posterOverride })
 
   return {
     id: metadata?.id ?? createUniqueId(`catalog-${slugify(detection.title)}`),
@@ -205,7 +266,8 @@ function createCatalogEntry(detection: DetectionResult, metadata?: MetadataCard)
     seasonNumber: getDetectionSeasonNumber(detection) ?? (metadata ? getMetadataSeasonNumber(metadata) : undefined),
     mediaType: metadata?.mediaType ?? detection.mediaType,
     score: metadata?.score,
-    poster: metadata?.poster ?? temporaryPoster,
+    poster: poster.poster,
+    posterKind: poster.posterKind,
     backdrop: metadata?.backdrop,
     genres: metadata?.genres ?? [],
     description: metadata?.description,
@@ -288,12 +350,11 @@ export class WatchLogRepository {
           mediaType: metadata?.mediaType ?? catalogMatch.mediaType,
           score: metadata?.score ?? catalogMatch.score,
           updatedAt: nowIso(),
-          poster:
-            (catalogMatch.poster && !hasTemporaryPoster(catalogMatch.poster)
-              ? catalogMatch.poster
-              : metadata?.poster) ??
-            catalogMatch.poster ??
-            getRandomTemporaryPoster(),
+          ...resolveCatalogPoster({
+            metadata,
+            existingCatalog: catalogMatch,
+            posterOverride: input.posterOverride,
+          }),
           backdrop: catalogMatch.backdrop ?? metadata?.backdrop,
           genres: catalogMatch.genres.length > 0 ? catalogMatch.genres : metadata?.genres ?? [],
           description: catalogMatch.description ?? metadata?.description,
@@ -307,7 +368,7 @@ export class WatchLogRepository {
           releaseYear: metadata?.releaseYear ?? catalogMatch.releaseYear,
           externalIds: buildExternalIds(catalogMatch.externalIds, metadata),
         }
-      : createCatalogEntry(hydratedDetection, metadata)
+      : createCatalogEntry(hydratedDetection, metadata, input.posterOverride)
 
     const source = createSourceEntry(hydratedDetection)
     const existingActivity = snapshot.activity.find((item) => item.catalogId === catalog.id)

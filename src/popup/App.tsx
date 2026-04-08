@@ -123,6 +123,15 @@ interface PopupInjectedPageSnapshot {
   youtubeHeading: string | null
 }
 
+interface PopupPosterCandidate {
+  url: string
+  label: string
+  source: 'meta' | 'page'
+  width?: number
+  height?: number
+  score: number
+}
+
 function inferSourceSite(url: URL): string {
   const hostname = url.hostname
 
@@ -267,7 +276,9 @@ function inferProgressPercent(
 function hasEnoughStoredMetadata(entry: LibraryEntry): boolean {
   const { catalog } = entry
   const hasAniListId = Boolean(catalog.externalIds.anilist)
-  const hasRealPoster = Boolean(catalog.poster && !hasTemporaryPoster(catalog.poster))
+  const hasRealPoster =
+    Boolean(catalog.poster && !hasTemporaryPoster(catalog.poster)) &&
+    catalog.posterKind !== 'unofficial'
   const hasDescription = Boolean(catalog.description?.trim())
   const hasTechnicalMetadata = Boolean(
     catalog.publicationStatus ||
@@ -307,19 +318,34 @@ function shouldResolveMetadataForPopup(
   return !hasEnoughStoredMetadata(matchedEntry)
 }
 
+function hasStoredOfficialPoster(entry: LibraryEntry | null): boolean {
+  const poster = entry?.catalog.poster
+
+  if (!poster || hasTemporaryPoster(poster)) {
+    return false
+  }
+
+  return entry.catalog.posterKind !== 'unofficial'
+}
+
 function getPreferredCapturePoster(
   matchedEntry: LibraryEntry | null,
   metadata: MetadataCard | null,
+  unofficialPoster: string | null,
   fallbackPoster: string,
 ): string {
   const storedPoster = matchedEntry?.catalog.poster
 
-  if (storedPoster && !hasTemporaryPoster(storedPoster)) {
+  if (hasStoredOfficialPoster(matchedEntry) && storedPoster) {
     return storedPoster
   }
 
   if (metadata?.poster) {
     return metadata.poster
+  }
+
+  if (unofficialPoster) {
+    return unofficialPoster
   }
 
   return storedPoster ?? fallbackPoster
@@ -513,6 +539,209 @@ async function runPopupScriptedDetection(tabId: number): Promise<{
   }
 }
 
+async function runPopupPosterProbe(tabId: number): Promise<PopupPosterCandidate[]> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const normalizeUrl = (rawValue: string | null | undefined) => {
+          const raw = rawValue?.trim()
+          if (!raw) {
+            return null
+          }
+
+          try {
+            const url = new URL(raw, window.location.href).toString()
+            return /^https?:/i.test(url) ? url : null
+          } catch {
+            return null
+          }
+        }
+
+        const scoreCandidate = (candidate: {
+          url: string
+          label: string
+          source: 'meta' | 'page'
+          width?: number
+          height?: number
+          top?: number
+        }) => {
+          let score = candidate.source === 'meta' ? 28 : 10
+          const ratio =
+            candidate.width && candidate.height ? candidate.width / candidate.height : undefined
+
+          if (ratio !== undefined) {
+            if (ratio >= 0.55 && ratio <= 0.82) {
+              score += 48
+            } else if (ratio > 0.82 && ratio <= 1.05) {
+              score += 28
+            } else if (ratio > 1.05 && ratio <= 1.9) {
+              score += 12
+            } else {
+              score -= 6
+            }
+          }
+
+          if (candidate.height) {
+            if (candidate.height >= 600) {
+              score += 16
+            } else if (candidate.height >= 320) {
+              score += 8
+            }
+          }
+
+          if (candidate.width && candidate.height && candidate.width * candidate.height >= 250000) {
+            score += 10
+          }
+
+          if (candidate.top !== undefined) {
+            score += Math.max(0, 12 - Math.min(12, Math.abs(candidate.top) / 100))
+          }
+
+          const hintText = `${candidate.url} ${candidate.label}`.toLowerCase()
+          if (/\b(?:cover|poster|volume|book|manga|novel|key visual|art)\b/.test(hintText)) {
+            score += 18
+          }
+
+          if (/\b(?:avatar|icon|logo|emoji|sprite|banner|ads?)\b/.test(hintText)) {
+            score -= 36
+          }
+
+          return score
+        }
+
+        const deduped = new Map<
+          string,
+          {
+            url: string
+            label: string
+            source: 'meta' | 'page'
+            width?: number
+            height?: number
+            score: number
+          }
+        >()
+
+        const pushCandidate = (candidate: {
+          url?: string | null
+          label: string
+          source: 'meta' | 'page'
+          width?: number
+          height?: number
+          top?: number
+        }) => {
+          const url = normalizeUrl(candidate.url)
+          if (!url) {
+            return
+          }
+
+          if (
+            candidate.width !== undefined &&
+            candidate.height !== undefined &&
+            (candidate.width < 120 || candidate.height < 120)
+          ) {
+            return
+          }
+
+          const score = scoreCandidate({
+            url,
+            label: candidate.label,
+            source: candidate.source,
+            width: candidate.width,
+            height: candidate.height,
+            top: candidate.top,
+          })
+
+          const existing = deduped.get(url)
+          if (!existing || score > existing.score) {
+            deduped.set(url, {
+              url,
+              label: candidate.label,
+              source: candidate.source,
+              width: candidate.width,
+              height: candidate.height,
+              score,
+            })
+          }
+        }
+
+        const getMeta = (property: string) =>
+          document
+            .querySelector(`meta[property="${property}"], meta[name="${property}"]`)
+            ?.getAttribute('content')
+            ?.trim() ?? null
+
+        const ogWidth = Number.parseInt(getMeta('og:image:width') ?? '', 10)
+        const ogHeight = Number.parseInt(getMeta('og:image:height') ?? '', 10)
+
+        pushCandidate({
+          url: getMeta('og:image'),
+          label: 'OG image',
+          source: 'meta',
+          width: Number.isFinite(ogWidth) ? ogWidth : undefined,
+          height: Number.isFinite(ogHeight) ? ogHeight : undefined,
+        })
+        pushCandidate({
+          url: getMeta('twitter:image'),
+          label: 'Twitter image',
+          source: 'meta',
+        })
+        pushCandidate({
+          url: getMeta('twitter:image:src'),
+          label: 'Twitter image',
+          source: 'meta',
+        })
+        pushCandidate({
+          url:
+            document.querySelector('meta[itemprop="image"]')?.getAttribute('content')?.trim() ??
+            null,
+          label: 'Item image',
+          source: 'meta',
+        })
+        pushCandidate({
+          url: document.querySelector('link[rel="image_src"]')?.getAttribute('href')?.trim() ?? null,
+          label: 'Linked image',
+          source: 'meta',
+        })
+
+        for (const image of Array.from(document.images)) {
+          const url = image.currentSrc || image.src
+          if (!url) {
+            continue
+          }
+
+          const alt = image.getAttribute('alt')?.trim() ?? ''
+          const className = image.getAttribute('class')?.trim() ?? ''
+          const rect = image.getBoundingClientRect()
+
+          pushCandidate({
+            url,
+            label: alt || className || 'Page image',
+            source: 'page',
+            width: image.naturalWidth || rect.width || undefined,
+            height: image.naturalHeight || rect.height || undefined,
+            top: Number.isFinite(rect.top) ? rect.top : undefined,
+          })
+        }
+
+        return Array.from(deduped.values())
+          .sort((left, right) => {
+            if (right.score !== left.score) {
+              return right.score - left.score
+            }
+
+            return (right.height ?? 0) - (left.height ?? 0)
+          })
+          .slice(0, 3)
+      },
+    })
+
+    return (result?.result as PopupPosterCandidate[] | undefined) ?? []
+  } catch {
+    return []
+  }
+}
+
 export function PopupApp() {
   const { locale, t } = useI18n()
   const [detection, setDetection] = useState<DetectionResult | null>(null)
@@ -539,6 +768,8 @@ export function PopupApp() {
   const [analyzing, setAnalyzing] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
   const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
+  const [posterCandidates, setPosterCandidates] = useState<PopupPosterCandidate[]>([])
+  const [selectedPosterUrl, setSelectedPosterUrl] = useState<string | null>(null)
   const [syncedDetectionSignature, setSyncedDetectionSignature] = useState<string | null>(null)
 
   useEffect(() => {
@@ -724,8 +955,39 @@ export function PopupApp() {
     if (detection) {
       setCapturePoster(getRandomTemporaryPoster())
       setSyncedDetectionSignature(null)
+      setPosterCandidates([])
+      setSelectedPosterUrl(null)
     }
   }, [detection?.normalizedTitle])
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!detection || targetTabId === null) {
+      setPosterCandidates([])
+      setSelectedPosterUrl(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void runPopupPosterProbe(targetTabId).then((candidates) => {
+      if (cancelled) {
+        return
+      }
+
+      setPosterCandidates(candidates)
+      setSelectedPosterUrl((current) =>
+        current && candidates.some((candidate) => candidate.url === current)
+          ? current
+          : candidates[0]?.url ?? null,
+      )
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [detection?.normalizedTitle, targetTabId])
 
   const matchedLibraryEntryFromDetection = detection
     ? findMatchingLibraryEntry(snapshot, detection)
@@ -903,6 +1165,7 @@ export function PopupApp() {
         listId: selectedList,
         favorite,
         metadata: resolvedMetadata ?? undefined,
+        posterOverride: selectedUnofficialPoster ?? undefined,
       })
 
       setSnapshot(response.snapshot)
@@ -964,8 +1227,26 @@ export function PopupApp() {
   )
   // const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
   const captureInitials = detection ? (detection.title) : 'WL'
+  const hasOfficialPoster = Boolean(resolvedMetadata?.poster) || hasStoredOfficialPoster(matchedLibraryEntry)
+  const shouldShowUnofficialPosterUI = !hasOfficialPoster && posterCandidates.length > 0
+  const selectedPosterCandidate =
+    posterCandidates.find((candidate) => candidate.url === selectedPosterUrl) ?? posterCandidates[0] ?? null
+  const selectedUnofficialPoster = shouldShowUnofficialPosterUI
+    ? selectedPosterCandidate?.url ?? null
+    : null
+  const canPersistPosterSelection =
+    Boolean(selectedUnofficialPoster) &&
+    (!matchedLibraryEntry ||
+      matchedLibraryEntry.catalog.poster !== selectedUnofficialPoster ||
+      matchedLibraryEntry.catalog.posterKind === 'temporary' ||
+      matchedLibraryEntry.catalog.posterKind === 'unofficial')
   const fallbackCapturePoster = detection
-    ? getPreferredCapturePoster(matchedLibraryEntry, resolvedMetadata, capturePoster)
+    ? getPreferredCapturePoster(
+        matchedLibraryEntry,
+        resolvedMetadata,
+        selectedUnofficialPoster,
+        capturePoster,
+      )
     : '/mock-posters/poster-01.svg'
   const popupOtherTitles = detection
     ? getPopupOtherTitles(
@@ -1026,6 +1307,9 @@ export function PopupApp() {
                       alt={`${detection.title} poster`}
                     />
                     <span className="capture-art-overlay" />
+                    {selectedUnofficialPoster ? (
+                      <span className="capture-poster-badge">{t('popup.posterUnofficial')}</span>
+                    ) : null}
                     <span className="capture-site">{detection.sourceSite}</span>
                     <strong className="capture-initials">{captureInitials}</strong>
                     <img
@@ -1075,6 +1359,37 @@ export function PopupApp() {
                       ) : null}
                     </div>
                   </div>
+
+                  {shouldShowUnofficialPosterUI ? (
+                    <div className="popup-section">
+                      <div className="popup-unofficial-copy">
+                        <span className="popup-unofficial-pill">{t('popup.posterUnofficial')}</span>
+                        <p className="popup-unofficial-message">
+                          {t('popup.posterMetadataMissing')}
+                        </p>
+                      </div>
+                      <div className="popup-poster-picker">
+                        {posterCandidates.map((candidate) => (
+                          <button
+                            key={candidate.url}
+                            className={`popup-poster-option ${
+                              selectedPosterCandidate?.url === candidate.url ? 'is-selected' : ''
+                            }`}
+                            type="button"
+                            onClick={() => setSelectedPosterUrl(candidate.url)}
+                          >
+                            <img
+                              className="popup-poster-option-image"
+                              src={candidate.url}
+                              alt={candidate.label}
+                            />
+                            <span className="popup-poster-option-label">{candidate.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="popup-poster-hint">{t('popup.posterPickerHint')}</p>
+                    </div>
+                  ) : null}
 
                   <div className="capture-progress-block">
                     <div className="capture-progress-copy">
@@ -1168,7 +1483,7 @@ export function PopupApp() {
               </article>
 
               <div className="popup-footer popup-primary-actions">
-                {matchedLibraryEntry ? (
+                {matchedLibraryEntry && !canPersistPosterSelection ? (
                   <button className="button" type="button" onClick={() => void handleOpenMatchedEntry()}>
                     {t('popup.addedInList', {
                       label: getLocalizedListLabel(
@@ -1180,7 +1495,7 @@ export function PopupApp() {
                   </button>
                 ) : (
                   <button className="button" type="button" disabled={busy} onClick={handleSave}>
-                    {t('popup.saveSuggestion')}
+                    {matchedLibraryEntry ? t('popup.updateSavedEntry') : t('popup.saveSuggestion')}
                   </button>
                 )}
                 <button className="button secondary" type="button" onClick={() => void openLibrary()}>

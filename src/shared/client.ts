@@ -50,20 +50,38 @@ export async function saveDetection(payload: SaveDetectionInput) {
 }
 
 export async function resolveDetectionMetadata(detection: DetectionResult) {
-  const queries = [detection.title]
+  const queries = Array.from(
+    new Set(
+      [
+        detection.title,
+        detection.normalizedTitle,
+      ].filter((query) => query.trim()),
+    ),
+  )
+
   if (detection.season !== undefined) {
     queries.push(`${detection.title} ${detection.season}`)
     queries.push(`${detection.title} season ${detection.season}`)
   }
 
-  const results = await Promise.all(queries.map((query) => metadataProvider.search(query)))
+  const [results, normalizedMatch] = await Promise.all([
+    Promise.all(queries.map((query) => metadataProvider.search(query))),
+    metadataProvider.findByNormalizedTitle(detection.normalizedTitle),
+  ])
+
   const items = results.flat()
-  return pickBestMetadataMatch(
+  const picked = pickBestMetadataMatch(
     items,
-    detection.title,
+    detection.normalizedTitle,
     getDetectionMediaTypeHints(detection),
     getDetectionSeasonNumber(detection),
   )
+
+  if (picked) {
+    return picked
+  }
+
+  return normalizedMatch
 }
 
 export async function addFromExplorer(metadataId: string, listId: string) {
