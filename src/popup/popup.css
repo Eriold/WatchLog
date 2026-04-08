@@ -166,7 +166,7 @@ body {
 .recent-card,
 .recent-empty-card,
 .empty-capture-card {
-  border-radius: 24px;
+  border-radius: 4px;
   border: 1px solid rgba(171, 170, 177, 0.12);
   background: rgba(18, 19, 25, 0.86);
   box-shadow:

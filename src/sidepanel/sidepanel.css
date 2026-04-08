@@ -19,10 +19,12 @@
   flex-direction: column;
   gap: 22px;
   min-height: 100vh;
-  padding: 24px 18px;
+  /* padding: 24px 18px; */
+  padding: 24px 0px;
   background: rgba(5, 7, 14, 0.86);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(24px);
+  z-index: 100;
 }
 
 .library-brand {
@@ -62,7 +64,7 @@
 .library-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0px;
 }
 
 .library-nav-button,
@@ -71,8 +73,8 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 13px 14px;
-  border-radius: 18px;
+  padding: 12px 16px;
+  /* border-radius: 18px; */
   border: 1px solid transparent;
   background: transparent;
   color: #98a3b8;
@@ -87,10 +89,23 @@
 .library-nav-button:hover,
 .library-settings-button:hover,
 .library-nav-button.is-active {
-  transform: translateX(2px);
-  background: rgba(156, 72, 234, 0.12);
-  border-color: rgba(204, 151, 255, 0.22);
+  background: rgb(41, 19, 61);
   color: #f5f2ff;
+}
+
+.content-elements {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin: -12px -16px;
+  padding: 12px 16px;
+}
+
+.content-elements.is-active,
+.content-elements:hover {
+  display: flex;
+  gap: 12px;
+  transform: translateX(12px);
 }
 
 .library-nav-icon {
@@ -212,7 +227,7 @@
 .queue-list-item.is-active .queue-list-main {
   transform: translateX(2px);
   background: rgba(105, 156, 255, 0.16);
-  border-color: rgba(105, 156, 255, 0.28);
+  /* border-color: rgba(105, 156, 255, 0.28); */
   color: #bfd1ff;
 }
 
@@ -944,7 +959,7 @@
   position: relative;
   aspect-ratio: 3 / 4;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 4px;
   background: rgba(18, 19, 25, 0.92);
   box-shadow: 0 24px 44px rgba(2, 6, 23, 0.38);
 }

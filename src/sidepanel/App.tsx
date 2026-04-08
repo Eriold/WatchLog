@@ -376,17 +376,17 @@ function NavGlyph({ kind, className }: { kind: NavGlyphKind; className?: string 
 
 type ListModalState =
   | {
-      mode: 'clear'
-      listId: string
-      label: string
-      input: string
-    }
+    mode: 'clear'
+    listId: string
+    label: string
+    input: string
+  }
   | {
-      mode: 'delete'
-      listId: string
-      label: string
-      input: string
-    }
+    mode: 'delete'
+    listId: string
+    label: string
+    input: string
+  }
 
 type EntryDeleteState = {
   catalogId: string
@@ -416,18 +416,18 @@ export function SidePanelApp() {
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
-      | 'library.loading'
-      | 'library.ready'
-      | 'library.listCreated'
-      | 'library.listUpdated'
-      | 'library.listDeleted'
-      | 'library.listCleared'
-      | 'library.listCreateFailed'
-      | 'library.errorWithReason'
-      | 'library.entryUpdated'
-      | 'library.entryDeleted'
-      | 'library.explorerRefreshed'
-      | 'library.addedToLibrary'
+    | 'library.loading'
+    | 'library.ready'
+    | 'library.listCreated'
+    | 'library.listUpdated'
+    | 'library.listDeleted'
+    | 'library.listCleared'
+    | 'library.listCreateFailed'
+    | 'library.errorWithReason'
+    | 'library.entryUpdated'
+    | 'library.entryDeleted'
+    | 'library.explorerRefreshed'
+    | 'library.addedToLibrary'
     params?: Record<string, string>
   }>({ key: 'library.loading' })
 
@@ -554,10 +554,10 @@ export function SidePanelApp() {
     selectedCatalogId === null
       ? null
       : entries.find(
-          (entry) =>
-            entry.catalog.id === selectedCatalogId &&
-            filteredEntries.some((candidate) => candidate.catalog.id === selectedCatalogId),
-        ) ?? null
+        (entry) =>
+          entry.catalog.id === selectedCatalogId &&
+          filteredEntries.some((candidate) => candidate.catalog.id === selectedCatalogId),
+      ) ?? null
 
   const selectedExplorerItem =
     selectedExplorerId === null
@@ -581,10 +581,10 @@ export function SidePanelApp() {
   const selectedEntryProgressSelectValue =
     selectedEntryProgressControl && selectedDraft
       ? String(
-          selectedDraft.listId === 'completed'
-            ? selectedEntryProgressControl.total
-            : selectedDraft.progressValue ?? selectedEntryProgressControl.current,
-        )
+        selectedDraft.listId === 'completed'
+          ? selectedEntryProgressControl.total
+          : selectedDraft.progressValue ?? selectedEntryProgressControl.current,
+      )
       : ''
   const selectedEntryProgressPercent =
     selectedEntry && selectedDraft && selectedEntryDisplayProgress
@@ -891,24 +891,24 @@ export function SidePanelApp() {
     const progressControl = getStructuredProgressControl(currentProgress)
     const nextProgress = progressControl
       ? buildProgressStateFromControl(
-          currentProgress,
-          selectedDraft.listId,
-          progressControl,
-          selectedDraft.listId === 'completed'
-            ? progressControl.total
-            : selectedDraft.progressValue ?? progressControl.current,
-        )
+        currentProgress,
+        selectedDraft.listId,
+        progressControl,
+        selectedDraft.listId === 'completed'
+          ? progressControl.total
+          : selectedDraft.progressValue ?? progressControl.current,
+      )
       : getResolvedProgressState(
-          {
-            ...currentProgress,
-            progressText: selectedDraft.progressText,
-          },
-          selectedDraft.listId,
-          {
-            episodeCount: selectedEntry.catalog.episodeCount,
-            chapterCount: selectedEntry.catalog.chapterCount,
-          },
-        )
+        {
+          ...currentProgress,
+          progressText: selectedDraft.progressText,
+        },
+        selectedDraft.listId,
+        {
+          episodeCount: selectedEntry.catalog.episodeCount,
+          chapterCount: selectedEntry.catalog.chapterCount,
+        },
+      )
     const response = await updateEntry({
       catalogId: selectedEntry.catalog.id,
       listId: selectedDraft.listId,
@@ -984,20 +984,22 @@ export function SidePanelApp() {
               type="button"
               onClick={() => handleSelectView(view.id)}
             >
-              <span className="library-nav-icon">
-                <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
-              </span>
-              <span className="library-nav-copy">
-                <strong>{view.label}</strong>
-                <span>
-                  {t(
-                    getViewCount(view.id, entries, explorerItems) === 1
-                      ? 'library.items.one'
-                      : 'library.items.other',
-                    { count: getViewCount(view.id, entries, explorerItems) },
-                  )}
+              <div className={`content-elements ${selectedViewId === view.id ? 'is-active' : ''}`}>
+                <span className="library-nav-icon">
+                  <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
                 </span>
-              </span>
+                <span className="library-nav-copy">
+                  <strong>{view.label}</strong>
+                  <span>
+                    {t(
+                      getViewCount(view.id, entries, explorerItems) === 1
+                        ? 'library.items.one'
+                        : 'library.items.other',
+                      { count: getViewCount(view.id, entries, explorerItems) },
+                    )}
+                  </span>
+                </span>
+              </div>
             </button>
           ))}
         </nav>
@@ -1133,9 +1135,8 @@ export function SidePanelApp() {
                       <option value="all">{t('library.platformAny')}</option>
                       {sourceOptions.map((source) => (
                         <option key={source} value={source}>
-                          {`${t('library.platformPrefix')}: ${
-                            source === 'Unknown' ? t('common.unknown') : source
-                          }`}
+                          {`${t('library.platformPrefix')}: ${source === 'Unknown' ? t('common.unknown') : source
+                            }`}
                         </option>
                       ))}
                     </select>
@@ -1157,17 +1158,17 @@ export function SidePanelApp() {
               <span className="library-status-chip">
                 {selectedViewId === EXPLORER_TAB_ID
                   ? t(
-                      explorerItems.length === 1
-                        ? 'library.explorerCards.one'
-                        : 'library.explorerCards.other',
-                      { count: explorerItems.length },
-                    )
+                    explorerItems.length === 1
+                      ? 'library.explorerCards.one'
+                      : 'library.explorerCards.other',
+                    { count: explorerItems.length },
+                  )
                   : t(
-                      filteredEntries.length === 1
-                        ? 'library.visibleItems.one'
-                        : 'library.visibleItems.other',
-                      { count: filteredEntries.length },
-                    )}
+                    filteredEntries.length === 1
+                      ? 'library.visibleItems.one'
+                      : 'library.visibleItems.other',
+                    { count: filteredEntries.length },
+                  )}
               </span>
             </div>
           </section>
@@ -1202,10 +1203,10 @@ export function SidePanelApp() {
                       </div>
                     </div>
                     <div className="library-card-body">
-                        <div>
-                          <h3 className="library-card-title">{item.title}</h3>
-                          <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
-                        </div>
+                      <div>
+                        <h3 className="library-card-title">{item.title}</h3>
+                        <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
+                      </div>
                       <div className="genre-row">
                         {item.genres.slice(0, 3).map((genre) => (
                           <span className="genre-chip" key={genre}>{genre}</span>
