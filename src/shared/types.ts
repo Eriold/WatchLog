@@ -9,6 +9,19 @@ export type MediaType =
 
 export type ListKind = 'system' | 'custom'
 
+export type PublicationStatus =
+  | 'FINISHED'
+  | 'RELEASING'
+  | 'NOT_YET_RELEASED'
+  | 'CANCELLED'
+  | 'HIATUS'
+
+export interface FuzzyDate {
+  year?: number
+  month?: number
+  day?: number
+}
+
 export interface WatchListDefinition {
   id: string
   label: string
@@ -55,6 +68,9 @@ export interface CatalogEntry {
   backdrop?: string
   genres: string[]
   description?: string
+  publicationStatus?: PublicationStatus
+  startDate?: FuzzyDate
+  endDate?: FuzzyDate
   releaseYear?: number
   runtime?: number
   seasonCount?: number
@@ -120,6 +136,9 @@ export interface MetadataCard {
   backdrop?: string
   genres: string[]
   description: string
+  publicationStatus?: PublicationStatus
+  startDate?: FuzzyDate
+  endDate?: FuzzyDate
   releaseYear?: number
   runtime?: number
   seasonCount?: number

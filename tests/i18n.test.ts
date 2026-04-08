@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatLocalizedFuzzyDate,
   getLocalizedProgressLabel,
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
+  getLocalizedPublicationStatusLabel,
   getSortedLocalizedLists,
 } from '../src/shared/i18n/helpers'
 import { resolveLocale, translate } from '../src/shared/i18n/translations'
@@ -70,5 +72,17 @@ describe('i18n helpers', () => {
         tEs,
       ),
     ).toBe('Temporada 2 • Episodios 1/10')
+  })
+
+  it('localizes publication statuses and fuzzy dates', () => {
+    const tEn = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) =>
+      translate('en', key, params)
+    const tEs = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) =>
+      translate('es', key, params)
+
+    expect(getLocalizedPublicationStatusLabel('HIATUS', tEn)).toBe('Hiatus')
+    expect(getLocalizedPublicationStatusLabel('RELEASING', tEs)).toBe('En emision')
+    expect(formatLocalizedFuzzyDate({ year: 2024 }, 'es')).toBe('2024')
+    expect(formatLocalizedFuzzyDate(undefined, 'en')).toBeNull()
   })
 })

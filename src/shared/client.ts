@@ -17,6 +17,7 @@ import { createMetadataProvider } from './metadata/create-provider'
 import { LocalStorageProvider } from './storage/local-storage-provider'
 import { WatchLogRepository } from './storage/repository'
 import type {
+  CatalogEntry,
   ExportActivityPayload,
   ExportCatalogPayload,
   DetectionResult,
@@ -73,6 +74,25 @@ export async function addFromExplorer(metadataId: string, listId: string) {
   }
 
   return repository.addFromMetadata(item, listId) as Promise<SaveDetectionResponse>
+}
+
+export async function getMetadataForCatalogEntry(
+  catalog: Pick<CatalogEntry, 'mediaType' | 'normalizedTitle' | 'externalIds'>,
+) {
+  const aniListId = catalog.externalIds.anilist
+
+  if (aniListId) {
+    const metadata = await metadataProvider.getById(`anilist:${aniListId}`)
+    if (metadata) {
+      return metadata
+    }
+  }
+
+  if (!['anime', 'manga'].includes(catalog.mediaType)) {
+    return undefined
+  }
+
+  return metadataProvider.findByNormalizedTitle(catalog.normalizedTitle)
 }
 
 export async function getLibrary() {

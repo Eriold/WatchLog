@@ -1,4 +1,4 @@
-import type { MediaType, MetadataCard } from '../types'
+import type { FuzzyDate, MediaType, MetadataCard, PublicationStatus } from '../types'
 import { inferSeasonNumberFromTitles } from '../season'
 import { normalizeTitle } from '../utils/normalize'
 
@@ -8,7 +8,17 @@ export interface AniListMedia {
   id: number
   type: AniListMediaType
   format?: string | null
-  status?: string | null
+  status?: PublicationStatus | null
+  startDate?: {
+    year?: number | null
+    month?: number | null
+    day?: number | null
+  } | null
+  endDate?: {
+    year?: number | null
+    month?: number | null
+    day?: number | null
+  } | null
   episodes?: number | null
   chapters?: number | null
   duration?: number | null
@@ -115,12 +125,38 @@ export function getAniListAvailableEpisodeCount(media: AniListMedia): number | u
   return undefined
 }
 
+function mapAniListFuzzyDate(
+  value?: AniListMedia['startDate'] | AniListMedia['endDate'],
+): FuzzyDate | undefined {
+  if (!value) {
+    return undefined
+  }
+
+  const next: FuzzyDate = {
+    year: value.year ?? undefined,
+    month: value.month ?? undefined,
+    day: value.day ?? undefined,
+  }
+
+  if (
+    next.year === undefined &&
+    next.month === undefined &&
+    next.day === undefined
+  ) {
+    return undefined
+  }
+
+  return next
+}
+
 export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard {
   const title = pickAniListTitle(media)
   const score =
     typeof media.averageScore === 'number' ? Math.round(media.averageScore) / 10 : undefined
   const resolvedEpisodeCount =
     media.type === 'ANIME' ? getAniListAvailableEpisodeCount(media) : undefined
+  const startDate = mapAniListFuzzyDate(media.startDate)
+  const endDate = mapAniListFuzzyDate(media.endDate)
 
   return {
     id: `anilist:${media.id}`,
@@ -141,7 +177,10 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
     backdrop: media.bannerImage ?? undefined,
     genres: media.genres ?? [],
     description: sanitizeAniListDescription(media.description),
-    releaseYear: media.seasonYear ?? undefined,
+    publicationStatus: media.status ?? undefined,
+    startDate,
+    endDate,
+    releaseYear: startDate?.year ?? media.seasonYear ?? undefined,
     runtime: media.type === 'ANIME' ? media.duration ?? undefined : undefined,
     seasonCount: undefined,
     episodeCount: resolvedEpisodeCount,

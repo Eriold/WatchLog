@@ -5,6 +5,7 @@ import {
   clearList,
   getExplorer,
   getLibrary,
+  getMetadataForCatalogEntry,
   removeEntry,
   removeList,
   updateList,
@@ -29,6 +30,7 @@ import {
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
 import type {
+  FuzzyDate,
   LibraryEntry,
   MetadataCard,
   WatchListDefinition,
@@ -36,9 +38,11 @@ import type {
 } from '../shared/types'
 import {
   formatLocalizedDate,
+  formatLocalizedFuzzyDate,
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
   getLocalizedMediaTypeLabel,
+  getLocalizedPublicationStatusLabel,
   getLocalizedProgressLabel,
 } from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
@@ -224,6 +228,14 @@ function getLibraryCardSeasonBadge(entry: LibraryEntry): string | null {
   )
 }
 
+function getTechnicalDateLabel(
+  value: FuzzyDate | undefined,
+  locale: ReturnType<typeof useI18n>['locale'],
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  return formatLocalizedFuzzyDate(value, locale) ?? t('common.unknown')
+}
+
 function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
@@ -395,6 +407,7 @@ export function SidePanelApp() {
   const [sortBy, setSortBy] = useState('recent')
   const [explorerQuery, setExplorerQuery] = useState('')
   const [explorerItems, setExplorerItems] = useState<MetadataCard[]>([])
+  const [selectedEntryMetadata, setSelectedEntryMetadata] = useState<MetadataCard | null>(null)
   const [newListLabel, setNewListLabel] = useState('')
   const [activeListSettingsId, setActiveListSettingsId] = useState<string | null>(null)
   const [listNameDraft, setListNameDraft] = useState('')
@@ -559,6 +572,7 @@ export function SidePanelApp() {
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? createEntryDraft(selectedEntry)
     : null
+  const selectedEntryDetails = selectedEntryMetadata ?? selectedEntry?.catalog ?? null
   const selectedEntryDisplayProgress =
     selectedEntry && selectedDraft ? getDraftProgressState(selectedEntry, selectedDraft) : null
   const selectedEntryProgressControl = selectedEntryDisplayProgress
@@ -582,6 +596,39 @@ export function SidePanelApp() {
   const sourceOptions = Array.from(
     new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown')),
   ).sort()
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!selectedEntry) {
+      setSelectedEntryMetadata(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setSelectedEntryMetadata(null)
+
+    const loadMetadata = async () => {
+      try {
+        const metadata = await getMetadataForCatalogEntry(selectedEntry.catalog)
+        if (!cancelled) {
+          setSelectedEntryMetadata(metadata ?? null)
+        }
+      } catch (error) {
+        console.warn('[WatchLog] library:selected-entry-metadata:error', error)
+        if (!cancelled) {
+          setSelectedEntryMetadata(null)
+        }
+      }
+    }
+
+    void loadMetadata()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedEntry?.catalog.id])
 
   function updateDraft(patch: Partial<EntryDraft>): void {
     if (!selectedEntry || !selectedDraft) return
@@ -1470,8 +1517,33 @@ export function SidePanelApp() {
                     <strong>{getLocalizedProgressLabel(selectedEntryDisplayProgress!, t)}</strong>
                   </div>
                   <div>
-                    <span className="entry-technical-label">{t('library.listItemCount')}</span>
-                    <strong>{selectedEntry.catalog.genres.length > 0 ? selectedEntry.catalog.genres.join(', ') : t('library.noMetadataYet')}</strong>
+                    <span className="entry-technical-label">{t('library.publicationStatus')}</span>
+                    <strong>
+                      {getLocalizedPublicationStatusLabel(
+                        selectedEntryDetails?.publicationStatus,
+                        t,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.startDate')}</span>
+                    <strong>
+                      {getTechnicalDateLabel(selectedEntryDetails?.startDate, locale, t)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.endDate')}</span>
+                    <strong>
+                      {getTechnicalDateLabel(selectedEntryDetails?.endDate, locale, t)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.genresLabel')}</span>
+                    <strong>
+                      {selectedEntryDetails?.genres && selectedEntryDetails.genres.length > 0
+                        ? selectedEntryDetails.genres.join(', ')
+                        : t('library.noMetadataYet')}
+                    </strong>
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('common.search')}</span>
@@ -1641,7 +1713,28 @@ export function SidePanelApp() {
                     <strong>{getExplorerSourceLabel(selectedExplorerItem, t)}</strong>
                   </div>
                   <div>
-                    <span className="entry-technical-label">{t('library.listItemCount')}</span>
+                    <span className="entry-technical-label">{t('library.publicationStatus')}</span>
+                    <strong>
+                      {getLocalizedPublicationStatusLabel(
+                        selectedExplorerItem.publicationStatus,
+                        t,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.startDate')}</span>
+                    <strong>
+                      {getTechnicalDateLabel(selectedExplorerItem.startDate, locale, t)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.endDate')}</span>
+                    <strong>
+                      {getTechnicalDateLabel(selectedExplorerItem.endDate, locale, t)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="entry-technical-label">{t('library.genresLabel')}</span>
                     <strong>
                       {selectedExplorerItem.genres.length > 0
                         ? selectedExplorerItem.genres.join(', ')

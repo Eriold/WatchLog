@@ -150,6 +150,16 @@ export class AniListClient {
             type
             format
             status
+            startDate {
+              year
+              month
+              day
+            }
+            endDate {
+              year
+              month
+              day
+            }
             episodes
             chapters
             duration
@@ -207,6 +217,16 @@ export class AniListClient {
           type
           format
           status
+          startDate {
+            year
+            month
+            day
+          }
+          endDate {
+            year
+            month
+            day
+          }
           episodes
           chapters
           duration

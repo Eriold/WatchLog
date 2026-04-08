@@ -18,6 +18,17 @@ describe('AniList metadata integration', () => {
     const card = mapAniListMediaToMetadataCard({
       id: 21,
       type: 'ANIME',
+      status: 'FINISHED',
+      startDate: {
+        year: 1998,
+        month: 4,
+        day: 3,
+      },
+      endDate: {
+        year: 1999,
+        month: 4,
+        day: 24,
+      },
       episodes: 64,
       duration: 24,
       seasonYear: 1998,
@@ -37,6 +48,9 @@ describe('AniList metadata integration', () => {
     expect(card.id).toBe('anilist:21')
     expect(card.title).toBe('Cowboy Bebop')
     expect(card.mediaType).toBe('anime')
+    expect(card.publicationStatus).toBe('FINISHED')
+    expect(card.startDate).toEqual({ year: 1998, month: 4, day: 3 })
+    expect(card.endDate).toEqual({ year: 1999, month: 4, day: 24 })
     expect(card.episodeCount).toBe(64)
     expect(card.runtime).toBe(24)
     expect(card.poster).toBe('https://img.test/bebop-xl.jpg')

@@ -195,6 +195,12 @@ describe('WatchLogRepository', () => {
         backdrop: 'https://img.anilist.co/one-piece-banner.jpg',
         genres: ['Adventure', 'Shounen'],
         description: 'Real AniList metadata',
+        publicationStatus: 'RELEASING',
+        startDate: {
+          year: 1999,
+          month: 10,
+          day: 20,
+        },
         episodeCount: 1122,
         score: 8.8,
       },
@@ -205,6 +211,12 @@ describe('WatchLogRepository', () => {
     expect(response.entry.catalog.poster).toBe('https://img.anilist.co/one-piece.jpg')
     expect(response.entry.catalog.backdrop).toBe('https://img.anilist.co/one-piece-banner.jpg')
     expect(response.entry.catalog.description).toBe('Real AniList metadata')
+    expect(response.entry.catalog.publicationStatus).toBe('RELEASING')
+    expect(response.entry.catalog.startDate).toEqual({
+      year: 1999,
+      month: 10,
+      day: 20,
+    })
     expect(response.entry.catalog.episodeCount).toBe(1122)
     expect(response.entry.catalog.score).toBe(8.8)
     expect(response.entry.activity.currentProgress.progressText).toBe('0/1122')
