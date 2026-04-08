@@ -1,4 +1,4 @@
-import type { MediaType, WatchListDefinition } from '../types'
+import type { MediaType, ProgressState, WatchListDefinition } from '../types'
 import type { I18nValue } from './context'
 import type { TranslationKey } from './translations'
 
@@ -50,6 +50,71 @@ export function getLocalizedListDefinitionLabel(
 
 export function getLocalizedMediaTypeLabel(mediaType: MediaType, t: Translator): string {
   return t(MEDIA_TYPE_KEYS[mediaType] ?? 'media.unknown')
+}
+
+export function getLocalizedProgressLabel(
+  progress: Pick<
+    ProgressState,
+    'season' | 'episode' | 'episodeTotal' | 'chapter' | 'chapterTotal' | 'progressText'
+  >,
+  t: Translator,
+): string {
+  if (progress.season !== undefined && progress.episode !== undefined) {
+    if (progress.episodeTotal !== undefined) {
+      return t('progress.seasonEpisodesOfTotal', {
+        season: progress.season,
+        current: progress.episode,
+        total: progress.episodeTotal,
+      })
+    }
+
+    return t('progress.seasonEpisodeCurrent', {
+      season: progress.season,
+      current: progress.episode,
+    })
+  }
+
+  if (progress.episode !== undefined) {
+    if (progress.episodeTotal !== undefined) {
+      return t('progress.episodesOfTotal', {
+        current: progress.episode,
+        total: progress.episodeTotal,
+      })
+    }
+
+    return t('progress.episodeCurrent', {
+      current: progress.episode,
+    })
+  }
+
+  if (progress.chapter !== undefined) {
+    if (progress.chapterTotal !== undefined) {
+      return t('progress.chaptersOfTotal', {
+        current: progress.chapter,
+        total: progress.chapterTotal,
+      })
+    }
+
+    return t('progress.chapterCurrent', {
+      current: progress.chapter,
+    })
+  }
+
+  if (progress.episodeTotal !== undefined) {
+    return t('progress.episodesOfTotal', {
+      current: 0,
+      total: progress.episodeTotal,
+    })
+  }
+
+  if (progress.chapterTotal !== undefined) {
+    return t('progress.chaptersOfTotal', {
+      current: 0,
+      total: progress.chapterTotal,
+    })
+  }
+
+  return progress.progressText
 }
 
 export function formatLocalizedDate(value: string, locale: I18nValue['locale']): string {

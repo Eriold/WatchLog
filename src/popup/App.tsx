@@ -38,6 +38,7 @@ import { getResolvedProgressState } from '../shared/progress'
 import { normalizeTitle } from '../shared/utils/normalize'
 import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
 import {
+  getLocalizedProgressLabel,
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
   getLocalizedMediaTypeLabel,
@@ -283,11 +284,16 @@ function getEntryProgressPercent(entry: LibraryEntry): number {
   )
 }
 
-function getPopupEntryProgressText(entry: LibraryEntry): string {
-  return getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+function getPopupEntryProgressText(
+  entry: LibraryEntry,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  const progress = getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
     episodeCount: entry.catalog.episodeCount,
     chapterCount: entry.catalog.chapterCount,
-  }).progressText
+  })
+
+  return getLocalizedProgressLabel(progress, t)
 }
 
 function buildDetectionFromSnapshot(
@@ -864,6 +870,19 @@ export function PopupApp() {
   const sourceHost = detection ? getHostnameLabel(detection.url) : ''
   const currentListLabel = getLocalizedListLabel(availableLists, selectedList, t)
   const captureProgressPercent = detection ? getDetectionProgressPercent(detection) : 0
+  const detectionProgressLabel = detection
+    ? getLocalizedProgressLabel(
+        {
+          season: detection.season,
+          episode: detection.episode,
+          episodeTotal: detection.episodeTotal,
+          chapter: detection.chapter,
+          chapterTotal: detection.chapterTotal,
+          progressText: detection.progressLabel,
+        },
+        t,
+      )
+    : ''
   const activeSessionsLabel = t(
     recentEntries.length === 1 ? 'popup.activeSession.one' : 'popup.activeSession.other',
     { count: recentEntries.length },
@@ -989,7 +1008,7 @@ export function PopupApp() {
                           ? t('popup.completePercent', { percent: captureProgressPercent })
                           : t('popup.awaitingProgress')}
                       </span>
-                      <span>{detection.progressLabel}</span>
+                      <span>{detectionProgressLabel}</span>
                     </div>
                     <div className="capture-progress-track">
                       <div
@@ -1004,7 +1023,7 @@ export function PopupApp() {
                       {getLocalizedMediaTypeLabel(detection.mediaType, t)}
                     </span>
                     <span className="status-pill">{currentListLabel}</span>
-                    <span className="status-pill status-pill-progress">{detection.progressLabel}</span>
+                    <span className="status-pill status-pill-progress">{detectionProgressLabel}</span>
                   </div>
 
                   <div className="popup-grid capture-controls">
@@ -1193,7 +1212,7 @@ export function PopupApp() {
                   <div>
                     <strong className="recent-title">{entry.catalog.title}</strong>
                     <p className="recent-subtitle">
-                      {getPopupEntryProgressText(entry)} /{' '}
+                      {getPopupEntryProgressText(entry, t)} /{' '}
                       {getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}
                     </p>
                   </div>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getLocalizedProgressLabel,
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
   getSortedLocalizedLists,
@@ -39,5 +40,35 @@ describe('i18n helpers', () => {
     )
 
     expect(sorted).toEqual(['Biblioteca', 'Finalizado', 'Viendo', 'Weekend binge'])
+  })
+
+  it('formats explicit progress labels for episodes and seasons', () => {
+    const tEn = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) =>
+      translate('en', key, params)
+    const tEs = (key: Parameters<typeof translate>[1], params?: Record<string, string | number>) =>
+      translate('es', key, params)
+
+    expect(
+      getLocalizedProgressLabel(
+        {
+          episode: 2,
+          episodeTotal: 13,
+          progressText: 'Ep 2/13',
+        },
+        tEn,
+      ),
+    ).toBe('Episodes 2/13')
+
+    expect(
+      getLocalizedProgressLabel(
+        {
+          season: 2,
+          episode: 1,
+          episodeTotal: 10,
+          progressText: 'S2 1/10',
+        },
+        tEs,
+      ),
+    ).toBe('Temporada 2 • Episodios 1/10')
   })
 })

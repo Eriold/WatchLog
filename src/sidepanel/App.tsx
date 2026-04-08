@@ -39,9 +39,11 @@ import {
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
   getLocalizedMediaTypeLabel,
+  getLocalizedProgressLabel,
 } from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
+import { TranslatedDescription } from '../shared/ui/TranslatedDescription'
 import './sidepanel.css'
 
 const ALL_TITLES_VIEW_ID = 'all-titles'
@@ -130,8 +132,11 @@ function getEntryDisplayProgress(entry: LibraryEntry) {
   })
 }
 
-function getEntryDisplayProgressText(entry: LibraryEntry): string {
-  return getEntryDisplayProgress(entry).progressText
+function getEntryDisplayProgressText(
+  entry: LibraryEntry,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  return getLocalizedProgressLabel(getEntryDisplayProgress(entry), t)
 }
 
 function createEntryDraft(entry: LibraryEntry): EntryDraft {
@@ -187,13 +192,6 @@ function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n
 
 function getMediaTypeBadgeClass(mediaType: LibraryEntry['catalog']['mediaType']): string {
   return `type-${mediaType}`
-}
-
-function truncateDescription(text: string | undefined, maxLength = 150): string {
-  const normalized = (text ?? '').replace(/\s+/g, ' ').trim()
-  if (!normalized) return ''
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
 }
 
 function getOtherTitles(
@@ -1166,7 +1164,13 @@ export function SidePanelApp() {
                           <span className="genre-chip" key={genre}>{genre}</span>
                         ))}
                       </div>
-                      <p className="library-card-description">{truncateDescription(item.description)}</p>
+                      <TranslatedDescription
+                        className="library-card-description"
+                        emptyFallback={t('library.noMetadataYet')}
+                        locale={locale}
+                        t={t}
+                        text={item.description}
+                      />
                       {existingEntry ? (
                         <p
                           className="explorer-existing-link"
@@ -1248,7 +1252,7 @@ export function SidePanelApp() {
                                 ? t('library.completedTrack')
                                 : t('library.activeTrack')}
                             </span>
-                            <span>{progress > 0 ? `${progress}%` : getEntryDisplayProgressText(entry)}</span>
+                            <span>{progress > 0 ? `${progress}%` : getEntryDisplayProgressText(entry, t)}</span>
                           </div>
                           <div className="library-card-progress-track">
                             <div className="library-card-progress-value" style={{ width: `${progress}%` }} />
@@ -1269,7 +1273,7 @@ export function SidePanelApp() {
                               <span className="genre-chip" key={token}>{token}</span>
                             ))}
                         </div>
-                        <p className="library-card-description">{getEntryDisplayProgressText(entry)}</p>
+                        <p className="library-card-description">{getEntryDisplayProgressText(entry, t)}</p>
                       </div>
                     </article>
                   )
@@ -1374,9 +1378,14 @@ export function SidePanelApp() {
 
               <div className="field-card">
                 <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <p className="library-detail-copy">
-                  {selectedEntry.catalog.description || t('library.noMetadataYet')}
-                </p>
+                <TranslatedDescription
+                  className="library-detail-copy"
+                  emptyFallback={t('library.noMetadataYet')}
+                  locale={locale}
+                  t={t}
+                  text={selectedEntry.catalog.description}
+                  appendGoogleAttribution
+                />
               </div>
 
               <div className="entry-detail-grid">
@@ -1458,7 +1467,7 @@ export function SidePanelApp() {
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('popup.progressLabel')}</span>
-                    <strong>{selectedEntryDisplayProgress!.progressText}</strong>
+                    <strong>{getLocalizedProgressLabel(selectedEntryDisplayProgress!, t)}</strong>
                   </div>
                   <div>
                     <span className="entry-technical-label">{t('library.listItemCount')}</span>
@@ -1499,7 +1508,19 @@ export function SidePanelApp() {
                           {source.favicon ? <img src={source.favicon} alt="" /> : null}
                           <div>
                             <strong>{source.siteName}</strong>
-                            <span>{source.progressText}</span>
+                            <span>
+                              {getLocalizedProgressLabel(
+                                {
+                                  season: source.season,
+                                  episode: source.episode,
+                                  episodeTotal: source.episodeTotal,
+                                  chapter: source.chapter,
+                                  chapterTotal: source.chapterTotal,
+                                  progressText: source.progressText,
+                                },
+                                t,
+                              )}
+                            </span>
                           </div>
                         </div>
                         <span className="history-date">
@@ -1577,9 +1598,14 @@ export function SidePanelApp() {
 
               <div className="field-card">
                 <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <p className="library-detail-copy">
-                  {selectedExplorerItem.description || t('library.noMetadataYet')}
-                </p>
+                <TranslatedDescription
+                  className="library-detail-copy"
+                  emptyFallback={t('library.noMetadataYet')}
+                  locale={locale}
+                  t={t}
+                  text={selectedExplorerItem.description}
+                  appendGoogleAttribution
+                />
               </div>
 
               <div className="entry-detail-actions-stack">

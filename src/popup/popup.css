@@ -205,6 +205,11 @@ body {
   object-fit: cover;
   z-index: 0;
   filter: saturate(1.08) contrast(1.02);
+  transform-origin: center;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.28s ease;
+  will-change: transform;
 }
 
 .capture-art-overlay {
@@ -622,6 +627,19 @@ body {
   object-fit: cover;
   z-index: 0;
   filter: saturate(1.06);
+  transform-origin: center;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.28s ease;
+  will-change: transform;
+}
+
+.capture-card:hover .capture-art-image,
+.capture-card:focus-within .capture-art-image,
+.recent-card:hover .recent-art-image,
+.recent-card:focus-within .recent-art-image {
+  transform: scale(1.045);
+  filter: saturate(1.1) contrast(1.03);
 }
 
 .recent-art-fallback {
@@ -712,6 +730,20 @@ body {
 .play-icon {
   width: 16px;
   height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-art-image,
+  .recent-art-image {
+    transition: none;
+  }
+
+  .capture-card:hover .capture-art-image,
+  .capture-card:focus-within .capture-art-image,
+  .recent-card:hover .recent-art-image,
+  .recent-card:focus-within .recent-art-image {
+    transform: none;
+  }
 }
 
 @media (max-width: 520px) {
