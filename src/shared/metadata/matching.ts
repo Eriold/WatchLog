@@ -182,9 +182,60 @@ function scoreTitleMatch(query: string, candidateTitles: string[]): number {
       const ratio = overlap / Math.max(queryTokens.size, candidateTokens.length)
       bestScore = Math.max(bestScore, Math.round(ratio * 60))
     }
+
+    const compactSimilarity = getCompactTitleSimilarity(query, candidate)
+    if (compactSimilarity >= 0.94) {
+      bestScore = Math.max(bestScore, 88)
+      continue
+    }
+
+    if (compactSimilarity >= 0.9) {
+      bestScore = Math.max(bestScore, 78)
+      continue
+    }
+
+    if (compactSimilarity >= 0.86) {
+      bestScore = Math.max(bestScore, 68)
+      continue
+    }
   }
 
   return bestScore
+}
+
+function getCompactTitleSimilarity(left: string, right: string): number {
+  const compactLeft = left.replace(/\s+/g, '')
+  const compactRight = right.replace(/\s+/g, '')
+
+  if (!compactLeft || !compactRight) {
+    return 0
+  }
+
+  if (compactLeft === compactRight) {
+    return 1
+  }
+
+  if (compactLeft.length < 2 || compactRight.length < 2) {
+    return 0
+  }
+
+  const leftBigrams = new Map<string, number>()
+  for (let index = 0; index < compactLeft.length - 1; index += 1) {
+    const bigram = compactLeft.slice(index, index + 2)
+    leftBigrams.set(bigram, (leftBigrams.get(bigram) ?? 0) + 1)
+  }
+
+  let overlap = 0
+  for (let index = 0; index < compactRight.length - 1; index += 1) {
+    const bigram = compactRight.slice(index, index + 2)
+    const count = leftBigrams.get(bigram) ?? 0
+    if (count > 0) {
+      overlap += 1
+      leftBigrams.set(bigram, count - 1)
+    }
+  }
+
+  return (2 * overlap) / (compactLeft.length + compactRight.length - 2)
 }
 
 export function pickBestMetadataMatch(

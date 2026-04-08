@@ -104,9 +104,16 @@ export function sanitizeAniListDescription(description?: string | null): string 
     .trim()
 }
 
-export function mapAniListTypeToMediaType(type: AniListMediaType): MediaType {
+export function mapAniListTypeToMediaType(
+  type: AniListMediaType,
+  format?: AniListMedia['format'],
+): MediaType {
   if (type === 'ANIME') {
     return 'anime'
+  }
+
+  if (format?.trim().toUpperCase() === 'NOVEL') {
+    return 'novel'
   }
 
   return 'manga'
@@ -168,7 +175,7 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
       media.title?.romaji?.trim(),
       media.title?.native?.trim(),
     ]),
-    mediaType: mapAniListTypeToMediaType(media.type),
+    mediaType: mapAniListTypeToMediaType(media.type, media.format),
     poster:
       media.coverImage?.extraLarge ??
       media.coverImage?.large ??

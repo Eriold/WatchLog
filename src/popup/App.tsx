@@ -36,7 +36,11 @@ import {
 import { buildLibraryUrl } from '../shared/navigation'
 import { getResolvedProgressState } from '../shared/progress'
 import { normalizeTitle } from '../shared/utils/normalize'
-import { getRandomTemporaryPoster, getTemporaryPoster } from '../shared/mock-posters'
+import {
+  getRandomTemporaryPoster,
+  getTemporaryPoster,
+  hasTemporaryPoster,
+} from '../shared/mock-posters'
 import {
   getLocalizedProgressLabel,
   getLocalizedListDefinitionLabel,
@@ -258,6 +262,67 @@ function inferProgressPercent(
   }
 
   return 0
+}
+
+function hasEnoughStoredMetadata(entry: LibraryEntry): boolean {
+  const { catalog } = entry
+  const hasAniListId = Boolean(catalog.externalIds.anilist)
+  const hasRealPoster = Boolean(catalog.poster && !hasTemporaryPoster(catalog.poster))
+  const hasDescription = Boolean(catalog.description?.trim())
+  const hasTechnicalMetadata = Boolean(
+    catalog.publicationStatus ||
+      catalog.startDate ||
+      catalog.endDate ||
+      catalog.releaseYear !== undefined ||
+      catalog.score !== undefined ||
+      catalog.episodeCount !== undefined ||
+      catalog.chapterCount !== undefined ||
+      catalog.genres.length > 0,
+  )
+
+  return hasAniListId && hasRealPoster && hasDescription && hasTechnicalMetadata
+}
+
+function shouldResolveMetadataForPopup(
+  detection: DetectionResult | null,
+  matchedEntry: LibraryEntry | null,
+): boolean {
+  if (!detection) {
+    return false
+  }
+
+  if (!matchedEntry) {
+    return true
+  }
+
+  const mediaType =
+    matchedEntry.catalog.mediaType !== 'unknown'
+      ? matchedEntry.catalog.mediaType
+      : detection.mediaType
+
+  if (!['anime', 'manga'].includes(mediaType)) {
+    return false
+  }
+
+  return !hasEnoughStoredMetadata(matchedEntry)
+}
+
+function getPreferredCapturePoster(
+  matchedEntry: LibraryEntry | null,
+  metadata: MetadataCard | null,
+  fallbackPoster: string,
+): string {
+  const storedPoster = matchedEntry?.catalog.poster
+
+  if (storedPoster && !hasTemporaryPoster(storedPoster)) {
+    return storedPoster
+  }
+
+  if (metadata?.poster) {
+    return metadata.poster
+  }
+
+  return storedPoster ?? fallbackPoster
 }
 
 function getDetectionProgressPercent(detection: DetectionResult): number {
@@ -669,11 +734,15 @@ export function PopupApp() {
     ? findMatchingLibraryEntryForMetadata(snapshot, resolvedMetadata)
     : null
   const matchedLibraryEntry = matchedLibraryEntryFromMetadata ?? matchedLibraryEntryFromDetection
+  const shouldResolveMetadata = shouldResolveMetadataForPopup(
+    detection,
+    matchedLibraryEntryFromDetection,
+  )
 
   useEffect(() => {
     let cancelled = false
 
-    if (!detection || matchedLibraryEntryFromDetection) {
+    if (!detection || !shouldResolveMetadata) {
       setResolvedMetadata(null)
       return () => {
         cancelled = true
@@ -698,22 +767,26 @@ export function PopupApp() {
           }
 
           const hydrated = hydrateDetectionWithMetadata(current, metadata)
+          const nextDetection = matchedLibraryEntryFromDetection
+            ? hydrated
+            : {
+                ...hydrated,
+                title: metadata.title,
+                normalizedTitle: metadata.normalizedTitle,
+              }
+
           if (
-            current.title === metadata.title &&
-            current.normalizedTitle === metadata.normalizedTitle &&
-            current.mediaType === hydrated.mediaType &&
-            current.episodeTotal === hydrated.episodeTotal &&
-            current.chapterTotal === hydrated.chapterTotal &&
-            current.progressLabel === hydrated.progressLabel
+            current.title === nextDetection.title &&
+            current.normalizedTitle === nextDetection.normalizedTitle &&
+            current.mediaType === nextDetection.mediaType &&
+            current.episodeTotal === nextDetection.episodeTotal &&
+            current.chapterTotal === nextDetection.chapterTotal &&
+            current.progressLabel === nextDetection.progressLabel
           ) {
             return current
           }
 
-          return {
-            ...hydrated,
-            title: metadata.title,
-            normalizedTitle: metadata.normalizedTitle,
-          }
+          return nextDetection
         })
       })
       .catch(() => {
@@ -729,7 +802,9 @@ export function PopupApp() {
     detection?.normalizedTitle,
     detection?.sourceSite,
     detection?.title,
+    matchedLibraryEntryFromDetection?.catalog.updatedAt,
     matchedLibraryEntryFromDetection?.catalog.id,
+    shouldResolveMetadata,
   ])
 
   useEffect(() => {
@@ -890,7 +965,7 @@ export function PopupApp() {
   // const captureInitials = detection ? getTitleInitials(detection.title) : 'WL'
   const captureInitials = detection ? (detection.title) : 'WL'
   const fallbackCapturePoster = detection
-    ? matchedLibraryEntry?.catalog.poster ?? resolvedMetadata?.poster ?? capturePoster
+    ? getPreferredCapturePoster(matchedLibraryEntry, resolvedMetadata, capturePoster)
     : '/mock-posters/poster-01.svg'
   const popupOtherTitles = detection
     ? getPopupOtherTitles(
@@ -948,7 +1023,7 @@ export function PopupApp() {
                     <img
                       className="capture-art-image"
                       src={fallbackCapturePoster}
-                      alt={`${detection.title} temporary poster`}
+                      alt={`${detection.title} poster`}
                     />
                     <span className="capture-art-overlay" />
                     <span className="capture-site">{detection.sourceSite}</span>
