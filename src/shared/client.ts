@@ -24,6 +24,7 @@ import type {
   UpdateEntryInput,
 } from './types'
 import { getDetectionMediaTypeHints, pickBestMetadataMatch } from './metadata/matching'
+import { getDetectionSeasonNumber } from './season'
 import { sendRuntimeMessage } from './storage/browser'
 
 const metadataProvider = createMetadataProvider()
@@ -60,7 +61,7 @@ export async function resolveDetectionMetadata(detection: DetectionResult) {
     items,
     detection.title,
     getDetectionMediaTypeHints(detection),
-    detection.season,
+    getDetectionSeasonNumber(detection),
   )
 }
 

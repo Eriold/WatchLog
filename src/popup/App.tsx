@@ -6,7 +6,11 @@ import {
   saveDetection,
 } from '../shared/client'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
-import { findMatchingLibraryEntry, toLibraryEntries } from '../shared/selectors'
+import {
+  findMatchingLibraryEntry,
+  findMatchingLibraryEntryForMetadata,
+  toLibraryEntries,
+} from '../shared/selectors'
 import { storageGet } from '../shared/storage/browser'
 import type {
   DetectionResult,
@@ -652,14 +656,18 @@ export function PopupApp() {
     }
   }, [detection?.normalizedTitle])
 
-  const matchedLibraryEntry = detection
+  const matchedLibraryEntryFromDetection = detection
     ? findMatchingLibraryEntry(snapshot, detection)
     : null
+  const matchedLibraryEntryFromMetadata = resolvedMetadata
+    ? findMatchingLibraryEntryForMetadata(snapshot, resolvedMetadata)
+    : null
+  const matchedLibraryEntry = matchedLibraryEntryFromMetadata ?? matchedLibraryEntryFromDetection
 
   useEffect(() => {
     let cancelled = false
 
-    if (!detection || matchedLibraryEntry) {
+    if (!detection || matchedLibraryEntryFromDetection) {
       setResolvedMetadata(null)
       return () => {
         cancelled = true
@@ -715,7 +723,7 @@ export function PopupApp() {
     detection?.normalizedTitle,
     detection?.sourceSite,
     detection?.title,
-    matchedLibraryEntry?.catalog.id,
+    matchedLibraryEntryFromDetection?.catalog.id,
   ])
 
   useEffect(() => {

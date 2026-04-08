@@ -201,6 +201,35 @@ describe('detectCurrentDocument', () => {
     expect(result?.mediaType).toBe('anime')
   })
 
+  it('keeps sequel numbers from AnimeAV1 titles instead of collapsing them into another show', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Isekai Nonbiri Nouka 2 Episodio 1 Sub Español Online en HD - AnimeAV1</title>
+        </head>
+        <body>
+          <main>
+            <div>Estás viendo</div>
+            <h1>Episodio 1</h1>
+            <a href="/media/isekai-nonbiri-nouka-2">Isekai Nonbiri Nouka 2</a>
+            <p>Segunda temporada de Isekai Nonbiri Nouka.</p>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://animeav1.com/media/isekai-nonbiri-nouka-2/1',
+    )
+
+    expect(result?.sourceSite).toBe('animeav1.com')
+    expect(result?.title).toBe('Isekai Nonbiri Nouka 2')
+    expect(result?.episode).toBe(1)
+    expect(result?.mediaType).toBe('anime')
+  })
+
   it('strips leading episode labels and infers anime on anime sites', () => {
     const fixture = `
       <!doctype html>

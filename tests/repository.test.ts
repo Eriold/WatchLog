@@ -454,4 +454,79 @@ describe('WatchLogRepository', () => {
     expect(response.entry.activity.status).toBe('library')
     expect(response.entry.activity.currentProgress.episodeTotal).toBe(12)
   })
+
+  it('does not merge a new anime into an unrelated stored entry that only shares a polluted alias', async () => {
+    const storage = new MemoryStorageProvider()
+    await storage.saveSnapshot({
+      catalog: [
+        {
+          id: 'konosuba-2',
+          title: "KONOSUBA -God's blessing on this wonderful world! 2",
+          normalizedTitle: 'konosuba gods blessing on this wonderful world 2',
+          aliases: ['Isekai Nonbiri Nouka 2'],
+          seasonNumber: 2,
+          mediaType: 'anime',
+          genres: ['Fantasy'],
+          externalIds: {},
+          createdAt: '2026-04-07T00:00:00.000Z',
+          updatedAt: '2026-04-07T00:00:00.000Z',
+        },
+      ],
+      activity: [
+        {
+          catalogId: 'konosuba-2',
+          status: 'watching',
+          favorite: false,
+          currentProgress: {
+            season: 2,
+            episode: 1,
+            progressText: 'S2 1/10',
+          },
+          sourceHistory: [],
+          manualNotes: '',
+          tags: [],
+          createdAt: '2026-04-07T00:00:00.000Z',
+          updatedAt: '2026-04-07T00:00:00.000Z',
+        },
+      ],
+      lists: [
+        { id: 'library', label: 'Library', kind: 'system' },
+        { id: 'watching', label: 'Viendo', kind: 'system' },
+        { id: 'completed', label: 'Finalizado', kind: 'system' },
+      ],
+    })
+
+    const repository = new WatchLogRepository(storage, new MockMetadataProvider())
+
+    const response = await repository.saveDetection({
+      listId: 'watching',
+      metadata: {
+        id: 'anilist:197824',
+        title: 'Farming Life in Another World 2',
+        normalizedTitle: 'farming life in another world 2',
+        aliases: ['Isekai Nonbiri Nouka 2', '異世界のんびり農家２'],
+        mediaType: 'anime',
+        genres: ['Fantasy'],
+        description: 'Mock',
+        episodeCount: 12,
+      },
+      detection: {
+        title: 'Isekai Nonbiri Nouka 2',
+        normalizedTitle: 'isekai nonbiri nouka 2',
+        mediaType: 'anime',
+        sourceSite: 'animeav1.com',
+        url: 'https://animeav1.com/media/isekai-nonbiri-nouka-2/1',
+        favicon: 'https://animeav1.com/favicon.ico',
+        pageTitle: 'Isekai Nonbiri Nouka 2 Episodio 1',
+        episode: 1,
+        progressLabel: 'Ep 1',
+        confidence: 0.84,
+      },
+    })
+
+    expect(response.snapshot.catalog).toHaveLength(2)
+    expect(response.snapshot.activity).toHaveLength(2)
+    expect(response.entry.catalog.id).toBe('anilist:197824')
+    expect(response.entry.catalog.title).toBe('Farming Life in Another World 2')
+  })
 })

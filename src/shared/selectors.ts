@@ -7,10 +7,8 @@ import type {
 } from './types'
 import {
   areMediaTypesCompatible,
-  getCatalogNormalizedTitles,
   getMetadataExternalIds,
   getMetadataNormalizedTitles,
-  hasNormalizedTitleOverlap,
 } from './metadata/matching'
 import {
   areSeasonNumbersCompatible,
@@ -46,48 +44,24 @@ export function findMatchingLibraryEntry(
   detection: DetectionResult,
 ): LibraryEntry | null {
   const entries = toLibraryEntries(snapshot)
-  const detectionTitles = [detection.normalizedTitle]
   const detectionSeasonNumber = getDetectionSeasonNumber(detection)
-  const exactMediaMatch = entries.find((entry) => {
+  const exactPrimaryMatch = entries.find((entry) => {
     return (
       areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
       areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
+      entry.catalog.normalizedTitle === detection.normalizedTitle
     )
   })
 
-  if (exactMediaMatch) {
-    return exactMediaMatch
-  }
-
-  const exactTitleMatch = entries.find((entry) => {
-    return (
-      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
-    )
-  })
-
-  if (exactTitleMatch) {
-    return exactTitleMatch
-  }
-
-  const fuzzyMediaMatch = entries.find((entry) => {
-    return (
-      areMediaTypesCompatible(entry.catalog.mediaType, detection.mediaType) &&
-      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
-    )
-  })
-
-  if (fuzzyMediaMatch) {
-    return fuzzyMediaMatch
+  if (exactPrimaryMatch) {
+    return exactPrimaryMatch
   }
 
   return (
     entries.find((entry) => {
       return (
         areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), detectionSeasonNumber) &&
-        hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), detectionTitles)
+        entry.catalog.normalizedTitle === detection.normalizedTitle
       )
     }) ?? null
   )
@@ -116,7 +90,7 @@ export function findMatchingLibraryEntryForMetadata(
       return (
         areMediaTypesCompatible(entry.catalog.mediaType, metadata.mediaType) &&
         areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(entry), metadataSeasonNumber) &&
-        hasNormalizedTitleOverlap(getCatalogNormalizedTitles(entry.catalog), metadataTitles)
+        metadataTitles.includes(entry.catalog.normalizedTitle)
       )
     }) ?? null
   )

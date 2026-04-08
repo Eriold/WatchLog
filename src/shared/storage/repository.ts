@@ -17,10 +17,8 @@ import type {
 import { hydrateDetectionWithMetadata } from '../metadata/detection-hydration'
 import {
   areMediaTypesCompatible,
-  getCatalogNormalizedTitles,
   getMetadataExternalIds,
   getMetadataNormalizedTitles,
-  hasNormalizedTitleOverlap,
   mergeAlternativeTitles,
 } from '../metadata/matching'
 import { normalizeTitle, slugify } from '../utils/normalize'
@@ -144,7 +142,7 @@ function findCatalogMatch(
     return (
       areMediaTypesCompatible(item.mediaType, targetMediaType) &&
       areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles)
+      targetTitles.includes(item.normalizedTitle)
     )
   })
 
@@ -156,7 +154,7 @@ function findCatalogMatch(
     return (
       areMediaTypesCompatible(item.mediaType, detection.mediaType) &&
       areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), [detection.normalizedTitle])
+      item.normalizedTitle === detection.normalizedTitle
     )
   })
 
@@ -167,7 +165,7 @@ function findCatalogMatch(
   return snapshot.catalog.find((item) => {
     return (
       areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
-      hasNormalizedTitleOverlap(getCatalogNormalizedTitles(item), targetTitles)
+      targetTitles.includes(item.normalizedTitle)
     )
   })
 }
@@ -600,9 +598,14 @@ export class WatchLogRepository {
     const normalizedQuery = normalizeTitle(query)
 
     return snapshot.catalog
-      .filter((catalog) =>
-        getCatalogNormalizedTitles(catalog).some((title) => title.includes(normalizedQuery)),
-      )
+      .filter((catalog) => {
+        const candidateTitles = [
+          catalog.normalizedTitle,
+          ...(catalog.aliases ?? []).map((title) => normalizeTitle(title)),
+        ]
+
+        return candidateTitles.some((title) => title.includes(normalizedQuery))
+      })
       .map((catalog) => buildEntry(snapshot, catalog.id))
       .filter((entry): entry is LibraryEntry => Boolean(entry))
   }
