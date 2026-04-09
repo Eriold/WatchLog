@@ -1,10 +1,12 @@
 export interface LibraryNavigationTarget {
   viewId: string | null
   catalogId: string | null
+  query: string | null
 }
 
 const LIBRARY_VIEW_PARAM = 'view'
 const LIBRARY_ENTRY_PARAM = 'entry'
+const LIBRARY_QUERY_PARAM = 'query'
 
 export function buildLibraryUrl(
   baseUrl: string,
@@ -20,6 +22,10 @@ export function buildLibraryUrl(
     url.searchParams.set(LIBRARY_ENTRY_PARAM, target.catalogId)
   }
 
+  if (target?.query) {
+    url.searchParams.set(LIBRARY_QUERY_PARAM, target.query)
+  }
+
   return url.toString()
 }
 
@@ -29,5 +35,6 @@ export function parseLibraryNavigationTarget(search: string): LibraryNavigationT
   return {
     viewId: params.get(LIBRARY_VIEW_PARAM),
     catalogId: params.get(LIBRARY_ENTRY_PARAM),
+    query: params.get(LIBRARY_QUERY_PARAM),
   }
 }

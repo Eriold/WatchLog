@@ -194,6 +194,21 @@ function PlayIcon() {
   )
 }
 
+function JumpToLibraryIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="action-icon popup-title-jump-icon">
+      <path
+        d="M8 16 16 8M10 8h6v6"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  )
+}
+
 function SyncStatusGlyph({ synced, className }: { synced: boolean; className?: string }) {
   if (synced) {
     return (
@@ -1459,7 +1474,11 @@ export function PopupApp() {
     }
   }
 
-  async function openLibrary(target?: { viewId?: string; catalogId?: string }): Promise<void> {
+  async function openLibrary(target?: {
+    viewId?: string
+    catalogId?: string
+    query?: string
+  }): Promise<void> {
     await chrome.tabs.create({
       url: buildLibraryUrl(chrome.runtime.getURL('library.html'), target),
     })
@@ -1474,6 +1493,7 @@ export function PopupApp() {
     await openLibrary({
       viewId: matchedLibraryEntry.activity.status,
       catalogId: matchedLibraryEntry.catalog.id,
+      query: matchedLibraryEntry.catalog.title,
     })
   }
 
@@ -1587,12 +1607,6 @@ export function PopupApp() {
   const selectedUnofficialPoster = shouldShowUnofficialPosterUI
     ? selectedPosterCandidate?.url ?? null
     : null
-  const canPersistPosterSelection =
-    Boolean(selectedUnofficialPoster) &&
-    (!matchedLibraryEntry ||
-      matchedLibraryEntry.catalog.poster !== selectedUnofficialPoster ||
-      matchedLibraryEntry.catalog.posterKind === 'temporary' ||
-      matchedLibraryEntry.catalog.posterKind === 'unofficial')
   const fallbackCapturePoster = detection
     ? getPreferredCapturePoster(
         matchedLibraryEntry,
@@ -1696,9 +1710,22 @@ export function PopupApp() {
                   <div className="popup-section">
                     <p className="label popup-compact-label">{t('popup.titleLabel')}</p>
                     <div className="popup-title-panel">
-                      <strong className="popup-title-value" title={detection.title}>
-                        {detection.title}
-                      </strong>
+                      <div className="popup-title-header">
+                        <strong className="popup-title-value" title={detection.title}>
+                          {detection.title}
+                        </strong>
+                        {matchedLibraryEntry ? (
+                          <button
+                            className="popup-title-jump"
+                            type="button"
+                            aria-label={t('popup.openMatchedInLibrary')}
+                            title={t('popup.openMatchedInLibrary')}
+                            onClick={() => void handleOpenMatchedEntry()}
+                          >
+                            <JumpToLibraryIcon />
+                          </button>
+                        ) : null}
+                      </div>
                       {popupOtherTitles.length > 0 ? (
                         <div className="popup-title-alias-block">
                           <p className="popup-title-alias-label">{t('popup.otherTitles')}</p>
@@ -1837,21 +1864,9 @@ export function PopupApp() {
               </article>
 
               <div className="popup-footer popup-primary-actions">
-                {matchedLibraryEntry && !canPersistPosterSelection ? (
-                  <button className="button" type="button" onClick={() => void handleOpenMatchedEntry()}>
-                    {t('popup.addedInList', {
-                      label: getLocalizedListLabel(
-                        availableLists,
-                        matchedLibraryEntry.activity.status,
-                        t,
-                      ),
-                    })}
-                  </button>
-                ) : (
-                  <button className="button" type="button" disabled={busy} onClick={handleSave}>
-                    {matchedLibraryEntry ? t('popup.updateSavedEntry') : t('popup.saveSuggestion')}
-                  </button>
-                )}
+                <button className="button" type="button" disabled={busy} onClick={handleSave}>
+                  {matchedLibraryEntry ? t('popup.saveProgress') : t('popup.saveSuggestion')}
+                </button>
                 <button className="button secondary" type="button" onClick={() => void openLibrary()}>
                   {t('popup.openFullLibrary')}
                 </button>

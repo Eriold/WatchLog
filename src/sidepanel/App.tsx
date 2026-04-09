@@ -69,11 +69,16 @@ function getInitialSnapshot(): WatchLogSnapshot {
   return { catalog: [], activity: [], lists: [] }
 }
 
-function getInitialLibrarySelection(): { viewId: string; catalogId: string | null } {
+function getInitialLibrarySelection(): {
+  viewId: string
+  catalogId: string | null
+  query: string
+} {
   if (typeof window === 'undefined') {
     return {
       viewId: ALL_TITLES_VIEW_ID,
       catalogId: null,
+      query: '',
     }
   }
 
@@ -82,6 +87,7 @@ function getInitialLibrarySelection(): { viewId: string; catalogId: string | nul
   return {
     viewId: target.viewId ?? ALL_TITLES_VIEW_ID,
     catalogId: target.catalogId,
+    query: target.query ?? '',
   }
 }
 
@@ -449,7 +455,7 @@ export function SidePanelApp() {
     () => getInitialLibrarySelection().catalogId,
   )
   const [selectedExplorerId, setSelectedExplorerId] = useState<string | null>(null)
-  const [libraryQuery, setLibraryQuery] = useState('')
+  const [libraryQuery, setLibraryQuery] = useState(() => getInitialLibrarySelection().query)
   const [typeFilter, setTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [sortBy, setSortBy] = useState('recent')

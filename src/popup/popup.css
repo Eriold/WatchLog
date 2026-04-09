@@ -460,13 +460,54 @@ body {
   background: rgba(10, 14, 24, 0.34);
 }
 
+.popup-title-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .popup-title-value {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   color: #f7f5fd;
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.35;
   letter-spacing: -0.02em;
+}
+
+.popup-title-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(105, 156, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(20, 28, 42, 0.78);
+  color: #bfd1ff;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.popup-title-jump:hover {
+  transform: translateY(-1px);
+  background: rgba(24, 36, 56, 0.94);
+  border-color: rgba(105, 156, 255, 0.36);
+  color: #eef4ff;
+}
+
+.popup-title-jump:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(105, 156, 255, 0.34);
 }
 
 .popup-title-alias-block {
@@ -943,8 +984,8 @@ body {
 }
 
 .action-icon {
-  width: 17px;
-  height: 17px;
+  width: 24px;
+  height: 24px;
 }
 
 .open-library-icon {

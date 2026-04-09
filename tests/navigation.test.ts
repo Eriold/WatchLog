@@ -9,19 +9,23 @@ describe('library navigation helpers', () => {
     const url = buildLibraryUrl('chrome-extension://watchlog/library.html', {
       viewId: 'watching',
       catalogId: 'catalog-42',
+      query: 'Dr. Stone',
     })
 
     expect(url).toBe(
-      'chrome-extension://watchlog/library.html?view=watching&entry=catalog-42',
+      'chrome-extension://watchlog/library.html?view=watching&entry=catalog-42&query=Dr.+Stone',
     )
   })
 
   it('parses a library deep link from the query string', () => {
     expect(
-      parseLibraryNavigationTarget('?view=queue-fantasia&entry=anilist%3A173652'),
+      parseLibraryNavigationTarget(
+        '?view=queue-fantasia&entry=anilist%3A173652&query=Dr.+Stone',
+      ),
     ).toEqual({
       viewId: 'queue-fantasia',
       catalogId: 'anilist:173652',
+      query: 'Dr. Stone',
     })
   })
 })
