@@ -9,7 +9,7 @@ import { normalizeTitle } from '../utils/normalize'
 const ANIME_HINT_PATTERN =
   /\b(?:anime|jkanime|animeflv|animeav1|crunchyroll|hidive|otaku|otakudesu|animesaturn|aniwatch)\b/i
 const MANGA_HINT_PATTERN =
-  /\b(?:manga|manhwa|manhua|webtoon|lectormanga|lectortmo|mangadex|manganato|asurascans)\b/i
+  /\b(?:manga|manhwa|manhua|webtoon|lectormanga|lectortmo|mangadex|manganato|asurascans|shadowmanga|inmanga)\b/i
 const NOVEL_HINT_PATTERN = /\b(?:novel|ranobe|light\s*novel|web\s*novel)\b/i
 
 function uniqueNormalizedTitles(values: Array<string | undefined>): string[] {

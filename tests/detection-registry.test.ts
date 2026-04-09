@@ -172,6 +172,86 @@ describe('detectCurrentDocument', () => {
     expect(result?.progressLabel).toContain('Cap 1080')
   })
 
+  it('cleans Shadow Manga SEO titles into the real manga name', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Leer One Piece manga online en español | Shadow Manga</title>
+          <meta property="og:title" content="Leer One Piece manga online en español | Shadow Manga" />
+        </head>
+        <body>
+          <main>
+            <p>Monkey D. Luffy quiere convertirse en el Rey de los Piratas.</p>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.shadowmanga.es/serie/local/52432',
+    )
+
+    expect(result?.sourceSite).toBe('shadowmanga.es')
+    expect(result?.title).toBe('One Piece')
+    expect(result?.mediaType).toBe('manga')
+  })
+
+  it('rejects generic Shadow Manga reader placeholder titles', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Manga online en español | Shadow Manga</title>
+          <meta property="og:title" content="Manga online en español | Shadow Manga" />
+        </head>
+        <body>
+          <main>
+            <h1>Lee manga online en español</h1>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.shadowmanga.es/reader/local/470877',
+    )
+
+    expect(result).toBeNull()
+  })
+
+  it('detects the hydrated Shadow Manga reader title from the header button', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Manga online en espaÃ±ol | Shadow Manga</title>
+          <meta property="og:title" content="Manga online en espaÃ±ol | Shadow Manga" />
+        </head>
+        <body>
+          <div class="fixed top-0 left-0 right-0 z-50 bg-black/80">
+            <div class="flex items-center px-3 py-2 max-w-4xl mx-auto gap-2">
+              <button class="text-xs font-bold text-white hover:text-primary-400 transition-colors truncate leading-tight">
+                Honzuki No Gekokujou Part 4
+              </button>
+            </div>
+          </div>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(
+      parseFixture(fixture),
+      'https://www.shadowmanga.es/reader/local/470879',
+    )
+
+    expect(result?.sourceSite).toBe('shadowmanga.es')
+    expect(result?.title).toBe('Honzuki No Gekokujou Part 4')
+    expect(result?.mediaType).toBe('manga')
+  })
+
   it('extracts the anime title when the h1 only contains the episode number', () => {
     const fixture = `
       <!doctype html>

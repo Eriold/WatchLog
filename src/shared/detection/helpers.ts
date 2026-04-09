@@ -58,12 +58,28 @@ export function getFirstHeadingText(document: Document, selector = 'h1'): string
 }
 
 export function cleanTitle(title: string, siteName: string): string {
-  return compactText(
+  const cleaned = compactText(
     title
       .replace(new RegExp(`\\s*[|\\-]\\s*${siteName}$`, 'i'), '')
-      .replace(/\s*[|\u00b7\u2022]\s*(Netflix|Prime Video|MAX|HBO Max|YouTube)$/i, '')
+      .replace(/\s*[|\u00b7\u2022]\s*(Netflix|Prime Video|MAX|HBO Max|YouTube|Shadow\s*Manga)$/i, '')
       .trim(),
   )
+
+  const seoTitlePatterns = [
+    /^(?:leer|lee|read)\s+(.+?)\s+(?:manga|manhwa|manhua|webtoon)(?:\s+online)?(?:\s+(?:en|in)\s+(?:espanol|español|spanish|english))?(?:\s+gratis)?$/i,
+    /^(.+?)\s+(?:manga|manhwa|manhua|webtoon)(?:\s+online)?(?:\s+(?:en|in)\s+(?:espanol|español|spanish|english))?(?:\s+gratis)?$/i,
+  ]
+
+  for (const pattern of seoTitlePatterns) {
+    const match = cleaned.match(pattern)
+    const candidate = match?.[1]?.trim()
+    const normalizedCandidate = candidate ? normalizeTitle(candidate) : ''
+    if (candidate && !/^(?:leer|lee|read)$/.test(normalizedCandidate)) {
+      return compactText(candidate)
+    }
+  }
+
+  return cleaned
 }
 
 function stripLeadingProgressDecorators(title: string): string {
@@ -169,9 +185,18 @@ export function isPlaceholderTitle(title: string, siteName: string): boolean {
     'watch',
     'video',
     'streaming',
+    'detalle de serie',
   ])
 
-  return placeholderTitles.has(normalizedTitle)
+  if (placeholderTitles.has(normalizedTitle)) {
+    return true
+  }
+
+  const genericReadingHubPatterns = [
+    /^(?:(?:leer|lee|read)\s+)?(?:manga|manhwa|manhua|webtoon)(?:\s+(?:en|in)\s+(?:espanol|spanish|english))?$/i,
+  ]
+
+  return genericReadingHubPatterns.some((pattern) => pattern.test(normalizedTitle))
 }
 
 export { type FaviconCandidate }
@@ -278,7 +303,7 @@ export function inferMediaType(
       hintText,
     )
   const looksLikeMangaSite =
-    /\b(?:manga|manhwa|manhua|webtoon|lectormanga|lectortmo|mangadex|manganato|asurascans)\b/i.test(
+    /\b(?:manga|manhwa|manhua|webtoon|lectormanga|lectortmo|mangadex|manganato|asurascans|shadowmanga|inmanga)\b/i.test(
       hintText,
     )
   const looksLikeNovelSite = /\b(?:novel|ranobe|light\s*novel|web\s*novel)\b/i.test(hintText)

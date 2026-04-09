@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mapAniListMediaToMetadataCard } from '../src/shared/metadata/anilist-mappers'
-import { pickBestMetadataMatch } from '../src/shared/metadata/matching'
+import { getDetectionMediaTypeHints, pickBestMetadataMatch } from '../src/shared/metadata/matching'
 import { normalizeTitle } from '../src/shared/utils/normalize'
 import type { MetadataCard } from '../src/shared/types'
 
@@ -61,5 +61,16 @@ describe('metadata matching', () => {
     )
 
     expect(match?.id).toBe('anilist:127249')
+  })
+
+  it('treats Shadow Manga hosts as manga hints even if the provisional media type is wrong', () => {
+    const hints = getDetectionMediaTypeHints({
+      mediaType: 'movie',
+      sourceSite: 'shadowmanga.es',
+      url: 'https://www.shadowmanga.es/serie/local/52432',
+    })
+
+    expect(hints[0]).toBe('manga')
+    expect(hints).toContain('movie')
   })
 })

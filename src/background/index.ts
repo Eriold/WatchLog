@@ -14,19 +14,18 @@ import type {
 import { STORAGE_KEYS } from '../shared/constants'
 import { createMetadataProvider } from '../shared/metadata/create-provider'
 import {
-  type FaviconCandidate,
-  cleanTitle,
   getFavicon,
-  inferMediaType,
   isPlaceholderTitle,
-  parseProgress,
-  resolveDetectedTitle,
 } from '../shared/detection/helpers'
+import {
+  buildDetectionFromScriptedSnapshot,
+  SCRIPTED_TEXT_TITLE_SELECTORS,
+  type ScriptedDetectionSnapshot,
+} from '../shared/detection/scripted-snapshot'
 import { LocalStorageProvider } from '../shared/storage/local-storage-provider'
 import { storageGet, storageSet, getActiveTab } from '../shared/storage/browser'
 import { WatchLogRepository } from '../shared/storage/repository'
 import type { DetectionResult } from '../shared/types'
-import { normalizeTitle } from '../shared/utils/normalize'
 
 const metadataProvider = createMetadataProvider()
 const repository = new WatchLogRepository(
@@ -95,93 +94,10 @@ async function getResolvedTab(tabId?: number): Promise<chrome.tabs.Tab | null> {
   }
 }
 
-interface InjectedPageSnapshot {
-  href: string
-  pageTitle: string
-  bodyText: string
-  faviconCandidates: FaviconCandidate[]
-  firstH1: string | null
-  playerResponseTitle: string | null
-  ogTitle: string | null
-  metaTitle: string | null
-  itempropName: string | null
-  youtubeHeading: string | null
-}
-
 interface DetectionProbeResult {
   detection: DetectionResult | null
   source: DetectionDebugInfo['source']
   reason?: string
-}
-
-function inferSourceSite(url: URL): string {
-  const hostname = url.hostname
-
-  if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
-    return 'YouTube'
-  }
-
-  if (hostname.includes('netflix.com')) {
-    return 'Netflix'
-  }
-
-  if (hostname.includes('max.com')) {
-    return 'Max'
-  }
-
-  if (hostname.includes('primevideo.com') || hostname.includes('amazon.com')) {
-    return 'Prime Video'
-  }
-
-  return hostname.replace(/^www\./i, '')
-}
-
-function buildDetectionFromSnapshot(
-  snapshot: InjectedPageSnapshot,
-  tabFaviconUrl?: string | null,
-): DetectionResult | null {
-  const url = new URL(snapshot.href)
-  const sourceSite = inferSourceSite(url)
-  const rawTitle = resolveDetectedTitle(sourceSite, [
-    snapshot.firstH1,
-    snapshot.playerResponseTitle,
-    snapshot.youtubeHeading,
-    snapshot.ogTitle,
-    snapshot.metaTitle,
-    snapshot.itempropName,
-    snapshot.pageTitle,
-  ])
-
-  if (!rawTitle) {
-    return null
-  }
-
-  const title = cleanTitle(rawTitle, sourceSite)
-  if (!title || isPlaceholderTitle(title, sourceSite)) {
-    return null
-  }
-
-  const parsed = parseProgress(`${rawTitle} ${snapshot.pageTitle} ${snapshot.bodyText}`)
-
-  return {
-    title,
-    normalizedTitle: normalizeTitle(title),
-    mediaType: inferMediaType(url, parsed, title),
-    sourceSite,
-    url: url.toString(),
-    favicon: getFavicon(url, {
-      candidates: snapshot.faviconCandidates,
-      tabFaviconUrl,
-    }),
-    pageTitle: snapshot.pageTitle,
-    season: parsed.season,
-    episode: parsed.episode,
-    episodeTotal: parsed.episodeTotal,
-    chapter: parsed.chapter,
-    chapterTotal: parsed.chapterTotal,
-    progressLabel: parsed.progressLabel,
-    confidence: 0.75,
-  }
 }
 
 async function requestScriptedDetection(tabId: number): Promise<DetectionProbeResult> {
@@ -189,7 +105,8 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
     const tab = await chrome.tabs.get(tabId).catch(() => null)
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
+      args: [SCRIPTED_TEXT_TITLE_SELECTORS],
+      func: (textTitleSelectors) => {
         const playerResponseTitle =
           (window as typeof window & {
             ytInitialPlayerResponse?: {
@@ -208,6 +125,8 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
           const text = document.querySelector(selector)?.textContent?.trim()
           return text ? compact(text) : null
         }
+        const titleCandidates: string[] = []
+        const seenTitles = new Set<string>()
         const faviconCandidates = Array.from(document.querySelectorAll('link[rel]'))
           .map((link) => ({
             href: link.getAttribute('href')?.trim() ?? '',
@@ -228,12 +147,11 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
             )
           })
 
-        let firstH1: string | null = null
-        for (const heading of document.querySelectorAll('h1')) {
-          const text = heading.textContent?.trim()
-          if (text) {
-            firstH1 = compact(text)
-            break
+        for (const selector of textTitleSelectors) {
+          const text = getText(selector)
+          if (text && !seenTitles.has(text)) {
+            seenTitles.add(text)
+            titleCandidates.push(text)
           }
         }
 
@@ -242,25 +160,20 @@ async function requestScriptedDetection(tabId: number): Promise<DetectionProbeRe
           pageTitle: document.title,
           bodyText: compact(document.body?.innerText ?? '').slice(0, 8000),
           faviconCandidates,
-          firstH1,
+          titleCandidates,
           playerResponseTitle: playerResponseTitle ? compact(playerResponseTitle) : null,
           ogTitle: getMeta('og:title'),
           metaTitle: getMeta('title'),
           itempropName:
             document.querySelector('meta[itemprop="name"]')?.getAttribute('content')?.trim() ??
             null,
-          youtubeHeading:
-            getText('ytd-watch-metadata h1') ??
-            getText('#title h1') ??
-            getText('h1.ytd-watch-metadata') ??
-            getText('yt-formatted-string.style-scope.ytd-watch-metadata'),
         }
       },
     })
 
     const detection = result?.result
-      ? buildDetectionFromSnapshot(
-          result.result as InjectedPageSnapshot,
+      ? buildDetectionFromScriptedSnapshot(
+          result.result as ScriptedDetectionSnapshot,
           tab?.favIconUrl ?? null,
         )
       : null
