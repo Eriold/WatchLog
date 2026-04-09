@@ -29,6 +29,10 @@ import {
 } from '../shared/season'
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
+import {
+  isCatalogMetadataPending,
+  isCatalogMetadataSynced,
+} from '../shared/catalog-sync'
 import type {
   FuzzyDate,
   LibraryEntry,
@@ -210,6 +214,50 @@ function formatCommunityScore(score?: number): string | null {
   }
 
   return score % 1 === 0 ? String(score) : score.toFixed(1)
+}
+
+function getCatalogSyncState(
+  catalog: Pick<LibraryEntry['catalog'], 'metadataSyncStatus'>,
+): 'synced' | 'pending' | null {
+  if (isCatalogMetadataSynced(catalog)) {
+    return 'synced'
+  }
+
+  if (isCatalogMetadataPending(catalog)) {
+    return 'pending'
+  }
+
+  return null
+}
+
+function SyncStatusGlyph({ synced, className }: { synced: boolean; className?: string }) {
+  if (synced) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path
+          d="m6.5 12.5 3.3 3.3 7.7-8.1"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <path
+        d="M7 7 17 17M17 7 7 17"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  )
 }
 
 function getExplorerCardSeasonBadge(item: MetadataCard): string | null {
@@ -1269,6 +1317,9 @@ export function SidePanelApp() {
                   const progress = getProgressPercent(entry)
                   const platform = entry.activity.lastSource?.siteName ?? t('library.manualEntry')
                   const seasonBadge = getLibraryCardSeasonBadge(entry)
+                  const syncState = getCatalogSyncState(entry.catalog)
+                  const showPendingPlaceholder =
+                    syncState === 'pending' && !entry.catalog.poster
 
                   return (
                     <article
@@ -1277,7 +1328,15 @@ export function SidePanelApp() {
                       onClick={() => handleSelectEntry(entry.catalog.id)}
                     >
                       <div className="library-card-poster-wrap">
-                        <img className="library-card-poster" src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)} alt={entry.catalog.title} />
+                        {showPendingPlaceholder ? (
+                          <div className="library-card-poster library-card-poster-placeholder" aria-hidden="true" />
+                        ) : (
+                          <img
+                            className="library-card-poster"
+                            src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)}
+                            alt={entry.catalog.title}
+                          />
+                        )}
                         <span className="library-card-overlay" />
                         {seasonBadge ? (
                           <span className="library-card-season-badge">{seasonBadge}</span>
@@ -1289,9 +1348,19 @@ export function SidePanelApp() {
                             </span>
                             {entry.activity.favorite ? <span className="favorite-badge">{t('common.favorite')}</span> : null}
                           </div>
-                          {formatCommunityScore(entry.catalog.score) ? (
-                            <span className="score-badge">{formatCommunityScore(entry.catalog.score)}</span>
-                          ) : null}
+                          <div className="library-card-status-group">
+                            {syncState ? (
+                              <span className={`catalog-sync-badge is-${syncState}`}>
+                                <SyncStatusGlyph
+                                  className="catalog-sync-icon"
+                                  synced={syncState === 'synced'}
+                                />
+                              </span>
+                            ) : null}
+                            {formatCommunityScore(entry.catalog.score) ? (
+                              <span className="score-badge">{formatCommunityScore(entry.catalog.score)}</span>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="library-card-progress">
                           <div className="library-card-progress-copy">
@@ -1359,11 +1428,16 @@ export function SidePanelApp() {
               <div className="entry-detail-poster-wrap">
                 <div className="entry-detail-poster-glow" />
                 <div className="entry-detail-poster-card">
-                  <img
-                    className="entry-detail-poster"
-                    src={selectedEntry.catalog.poster ?? getTemporaryPoster(selectedEntry.catalog.normalizedTitle)}
-                    alt={selectedEntry.catalog.title}
-                  />
+                  {getCatalogSyncState(selectedEntry.catalog) === 'pending' &&
+                  !selectedEntry.catalog.poster ? (
+                    <div className="entry-detail-poster entry-detail-poster-placeholder" aria-hidden="true" />
+                  ) : (
+                    <img
+                      className="entry-detail-poster"
+                      src={selectedEntry.catalog.poster ?? getTemporaryPoster(selectedEntry.catalog.normalizedTitle)}
+                      alt={selectedEntry.catalog.title}
+                    />
+                  )}
                   <span className="entry-detail-status-pill">
                     {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
                   </span>

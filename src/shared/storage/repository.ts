@@ -6,6 +6,7 @@ import type {
   ExportActivityPayload,
   ExportCatalogPayload,
   LibraryEntry,
+  MetadataSyncStatus,
   MetadataCard,
   PosterKind,
   ProgressState,
@@ -212,8 +213,9 @@ function resolveCatalogPoster(
     metadata?: MetadataCard
     existingCatalog?: CatalogEntry
     posterOverride?: string
+    disableTemporaryPoster?: boolean
   },
-): { poster: string; posterKind: PosterKind } {
+): { poster?: string; posterKind?: PosterKind } {
   if (input.metadata?.poster) {
     return {
       poster: input.metadata.poster,
@@ -243,6 +245,10 @@ function resolveCatalogPoster(
     }
   }
 
+  if (input.disableTemporaryPoster) {
+    return {}
+  }
+
   return {
     poster: getRandomTemporaryPoster(),
     posterKind: 'temporary',
@@ -253,10 +259,16 @@ function createCatalogEntry(
   detection: DetectionResult,
   metadata?: MetadataCard,
   posterOverride?: string,
+  metadataSyncStatus?: MetadataSyncStatus,
+  disableTemporaryPoster?: boolean,
 ): CatalogEntry {
   const timestamp = nowIso()
   const primaryTitle = getCatalogPrimaryTitle(detection, metadata)
-  const poster = resolveCatalogPoster({ metadata, posterOverride })
+  const poster = resolveCatalogPoster({
+    metadata,
+    posterOverride,
+    disableTemporaryPoster,
+  })
 
   return {
     id: metadata?.id ?? createUniqueId(`catalog-${slugify(detection.title)}`),
@@ -265,6 +277,7 @@ function createCatalogEntry(
     aliases: buildCatalogAliases(primaryTitle, undefined, detection, metadata),
     seasonNumber: getDetectionSeasonNumber(detection) ?? (metadata ? getMetadataSeasonNumber(metadata) : undefined),
     mediaType: metadata?.mediaType ?? detection.mediaType,
+    metadataSyncStatus: metadata ? 'synced' : metadataSyncStatus,
     score: metadata?.score,
     poster: poster.poster,
     posterKind: poster.posterKind,
@@ -332,10 +345,16 @@ export class WatchLogRepository {
     const snapshot = await this.storageProvider.getSnapshot()
     const metadata =
       input.metadata ??
-      (await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
+      (input.skipMetadataLookup
+        ? undefined
+        : await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
     const hydratedDetection = hydrateDetectionWithMetadata(input.detection, metadata)
     const catalogMatch = findCatalogMatch(snapshot, hydratedDetection, metadata)
     const primaryTitle = getCatalogPrimaryTitle(hydratedDetection, metadata)
+    const nextMetadataSyncStatus =
+      metadata
+        ? 'synced'
+        : catalogMatch?.metadataSyncStatus ?? input.metadataSyncStatus
 
     const catalog = catalogMatch
       ? {
@@ -350,10 +369,12 @@ export class WatchLogRepository {
           mediaType: metadata?.mediaType ?? catalogMatch.mediaType,
           score: metadata?.score ?? catalogMatch.score,
           updatedAt: nowIso(),
+          metadataSyncStatus: nextMetadataSyncStatus,
           ...resolveCatalogPoster({
             metadata,
             existingCatalog: catalogMatch,
             posterOverride: input.posterOverride,
+            disableTemporaryPoster: input.disableTemporaryPoster,
           }),
           backdrop: catalogMatch.backdrop ?? metadata?.backdrop,
           genres: catalogMatch.genres.length > 0 ? catalogMatch.genres : metadata?.genres ?? [],
@@ -368,7 +389,13 @@ export class WatchLogRepository {
           releaseYear: metadata?.releaseYear ?? catalogMatch.releaseYear,
           externalIds: buildExternalIds(catalogMatch.externalIds, metadata),
         }
-      : createCatalogEntry(hydratedDetection, metadata, input.posterOverride)
+      : createCatalogEntry(
+          hydratedDetection,
+          metadata,
+          input.posterOverride,
+          nextMetadataSyncStatus,
+          input.disableTemporaryPoster,
+        )
 
     const source = createSourceEntry(hydratedDetection)
     const existingActivity = snapshot.activity.find((item) => item.catalogId === catalog.id)

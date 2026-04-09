@@ -31,7 +31,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 6px;
+  padding: 18px 20px;
 }
 
 .library-brand-mark {
@@ -99,6 +99,11 @@
   width: 100%;
   margin: -12px -16px;
   padding: 12px 16px;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
 .content-elements.is-active,
@@ -144,6 +149,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 0 16px;
 }
 
 .library-sidebar-label {
@@ -492,6 +498,10 @@
   will-change: transform;
 }
 
+.library-card-poster-placeholder {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.94), rgba(10, 10, 14, 0.98));
+}
+
 .library-card:hover .library-card-poster,
 .library-card:focus-within .library-card-poster {
   transform: scale(1.05);
@@ -539,6 +549,12 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.library-card-status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .media-badge,
@@ -669,6 +685,32 @@
   letter-spacing: 0.02em;
   box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
   backdrop-filter: blur(6px);
+}
+
+.catalog-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(5, 8, 16, 0.74);
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(6px);
+}
+
+.catalog-sync-badge.is-synced {
+  color: #6bff8f;
+}
+
+.catalog-sync-badge.is-pending {
+  color: #ff7d7d;
+}
+
+.catalog-sync-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .library-card-progress {
@@ -968,6 +1010,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.entry-detail-poster-placeholder {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.94), rgba(10, 10, 14, 0.98));
 }
 
 .entry-detail-status-pill {

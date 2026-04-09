@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import {
+  addList,
   getActiveDetection,
   getLibrary,
   resolveDetectionMetadata,
   saveDetection,
 } from '../shared/client'
+import {
+  extractZonaTmoCatalogSnapshot,
+  isZonaTmoCatalogPage,
+  type ZonaTmoCatalogImportItem,
+  type ZonaTmoCatalogSnapshot,
+} from '../shared/catalog-import/zonatmo'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
 import {
   findMatchingLibraryEntry,
@@ -31,6 +38,10 @@ import {
 } from '../shared/metadata/detection-hydration'
 import { buildLibraryUrl } from '../shared/navigation'
 import { getResolvedProgressState } from '../shared/progress'
+import {
+  isCatalogMetadataPending,
+  isCatalogMetadataSynced,
+} from '../shared/catalog-sync'
 import { normalizeTitle } from '../shared/utils/normalize'
 import {
   getRandomTemporaryPoster,
@@ -115,6 +126,16 @@ interface PopupPosterCandidate {
   score: number
 }
 
+const CREATE_NEW_LIST_OPTION = '__create_new_list__'
+
+interface CatalogImportProgressState {
+  stage: 'queueing' | 'syncing' | 'done' | 'error'
+  processed: number
+  total: number
+  label?: string
+  reason?: string
+}
+
 function getHostnameLabel(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./i, '')
@@ -173,6 +194,36 @@ function PlayIcon() {
   )
 }
 
+function SyncStatusGlyph({ synced, className }: { synced: boolean; className?: string }) {
+  if (synced) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path
+          d="m6.5 12.5 3.3 3.3 7.7-8.1"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+      <path
+        d="M7 7 17 17M17 7 7 17"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  )
+}
+
 function getTitleInitials(title: string): string {
   const tokens = title
     .split(/\s+/)
@@ -209,6 +260,58 @@ function getPopupOtherTitles(
   }
 
   return aliases
+}
+
+function getCatalogSyncState(
+  catalog: Pick<LibraryEntry['catalog'], 'metadataSyncStatus'>,
+): 'synced' | 'pending' | null {
+  if (isCatalogMetadataSynced(catalog)) {
+    return 'synced'
+  }
+
+  if (isCatalogMetadataPending(catalog)) {
+    return 'pending'
+  }
+
+  return null
+}
+
+function findExistingListByLabel(
+  lists: WatchListDefinition[],
+  label: string,
+  t: ReturnType<typeof useI18n>['t'],
+): WatchListDefinition | undefined {
+  const normalizedLabel = normalizeTitle(label)
+  if (!normalizedLabel) {
+    return undefined
+  }
+
+  return lists.find((list) => {
+    const localized = normalizeTitle(getLocalizedListDefinitionLabel(list, t))
+    const raw = normalizeTitle(list.label)
+    return localized === normalizedLabel || raw === normalizedLabel
+  })
+}
+
+function buildCatalogImportDetection(
+  item: ZonaTmoCatalogImportItem,
+  sourceSite: string,
+): DetectionResult {
+  return {
+    title: item.title,
+    normalizedTitle: item.normalizedTitle,
+    mediaType: item.mediaType,
+    sourceSite,
+    url: item.sourceUrl,
+    favicon: `https://${sourceSite}/favicon.ico`,
+    pageTitle: item.title,
+    progressLabel: 'Sin progreso',
+    confidence: 1,
+  }
+}
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function inferProgressPercent(
@@ -652,6 +755,19 @@ async function runPopupPosterProbe(tabId: number): Promise<PopupPosterCandidate[
   }
 }
 
+async function runZonaTmoCatalogProbe(tabId: number): Promise<ZonaTmoCatalogSnapshot | null> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractZonaTmoCatalogSnapshot,
+    })
+
+    return (result?.result as ZonaTmoCatalogSnapshot | null | undefined) ?? null
+  } catch {
+    return null
+  }
+}
+
 export function PopupApp() {
   const { locale, t } = useI18n()
   const [detection, setDetection] = useState<DetectionResult | null>(null)
@@ -676,11 +792,22 @@ export function PopupApp() {
   }>({ key: 'common.loading' })
   const [busy, setBusy] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [catalogImportBusy, setCatalogImportBusy] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
+  const [targetTabUrl, setTargetTabUrl] = useState<string | null>(null)
   const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
   const [posterCandidates, setPosterCandidates] = useState<PopupPosterCandidate[]>([])
   const [selectedPosterUrl, setSelectedPosterUrl] = useState<string | null>(null)
   const [syncedDetectionSignature, setSyncedDetectionSignature] = useState<string | null>(null)
+  const [catalogImportSnapshot, setCatalogImportSnapshot] = useState<ZonaTmoCatalogSnapshot | null>(null)
+  const [catalogImportTarget, setCatalogImportTarget] = useState<string>(CREATE_NEW_LIST_OPTION)
+  const [catalogImportNewListLabel, setCatalogImportNewListLabel] = useState('')
+  const [catalogImportMergeConfirmed, setCatalogImportMergeConfirmed] = useState(false)
+  const [catalogImportProgress, setCatalogImportProgress] = useState<CatalogImportProgressState | null>(null)
+  const [catalogImportCompletedTarget, setCatalogImportCompletedTarget] = useState<{
+    listId: string
+    label: string
+  } | null>(null)
 
   useEffect(() => {
     document.title = t('titles.popup')
@@ -689,12 +816,14 @@ export function PopupApp() {
   async function loadDetection(forceRefresh = false): Promise<DetectionResult | null> {
     const tab = await getPopupTargetTab()
     const resolvedTabId = tab?.id ?? null
+    const resolvedTabUrl = tab?.url ?? tab?.pendingUrl ?? null
     setTargetTabId(resolvedTabId)
+    setTargetTabUrl(resolvedTabUrl)
 
     if (resolvedTabId === null) {
       setDebug({
         tabId: null,
-        tabUrl: tab?.url ?? tab?.pendingUrl ?? null,
+        tabUrl: resolvedTabUrl,
         source: 'none',
         reason: 'popup-could-not-resolve-tab',
       })
@@ -705,14 +834,14 @@ export function PopupApp() {
       const local = await runPopupScriptedDetection(resolvedTabId)
       setDebug({
         ...local.debug,
-        tabUrl: local.debug.tabUrl ?? tab?.url ?? tab?.pendingUrl ?? null,
+        tabUrl: local.debug.tabUrl ?? resolvedTabUrl,
       })
       return local.detection
     }
 
     let latestDebug: DetectionDebugInfo = {
       tabId: resolvedTabId,
-      tabUrl: tab?.url ?? tab?.pendingUrl ?? null,
+      tabUrl: resolvedTabUrl,
       source: 'none',
       reason: 'waiting-for-detection',
     }
@@ -732,7 +861,7 @@ export function PopupApp() {
     if (local.detection) {
       setDebug({
         ...local.debug,
-        tabUrl: local.debug.tabUrl ?? tab?.url ?? tab?.pendingUrl ?? null,
+        tabUrl: local.debug.tabUrl ?? resolvedTabUrl,
       })
       return local.detection
     }
@@ -741,7 +870,7 @@ export function PopupApp() {
       local.debug.reason
         ? {
             ...local.debug,
-            tabUrl: local.debug.tabUrl ?? tab?.url ?? tab?.pendingUrl ?? null,
+            tabUrl: local.debug.tabUrl ?? resolvedTabUrl,
           }
         : latestDebug,
     )
@@ -848,8 +977,84 @@ export function PopupApp() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    if (targetTabId === null || !targetTabUrl || !isZonaTmoCatalogPage(targetTabUrl)) {
+      setCatalogImportSnapshot(null)
+      setCatalogImportProgress(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void runZonaTmoCatalogProbe(targetTabId).then((result) => {
+      if (cancelled) {
+        return
+      }
+
+      setCatalogImportSnapshot(result)
+      if (!result) {
+        setCatalogImportProgress(null)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [targetTabId, targetTabUrl])
+
+  useEffect(() => {
+    if (!catalogImportSnapshot) {
+      setCatalogImportTarget(CREATE_NEW_LIST_OPTION)
+      setCatalogImportNewListLabel('')
+      setCatalogImportMergeConfirmed(false)
+      setCatalogImportCompletedTarget(null)
+      return
+    }
+
+    setCatalogImportTarget(CREATE_NEW_LIST_OPTION)
+    setCatalogImportNewListLabel(catalogImportSnapshot.listLabel)
+    setCatalogImportMergeConfirmed(false)
+    setCatalogImportCompletedTarget(null)
+    setCatalogImportProgress(null)
+  }, [catalogImportSnapshot?.sourceUrl])
+
+  useEffect(() => {
+    if (!catalogImportSnapshot) {
+      return
+    }
+
     const availableLists = getSortedLocalizedLists(
-      listOptions,
+      buildPopupListOptions(snapshot.lists, listOptions),
+      locale,
+      t,
+    )
+
+    setCatalogImportTarget((current) => {
+      const currentIsExistingList = availableLists.some((list) => list.id === current)
+      if (currentIsExistingList || current === CREATE_NEW_LIST_OPTION) {
+        return current
+      }
+
+      return CREATE_NEW_LIST_OPTION
+    })
+    setCatalogImportNewListLabel((current) =>
+      current.trim() ? current : catalogImportSnapshot.listLabel,
+    )
+  }, [catalogImportSnapshot, snapshot.lists, listOptions, locale, t])
+
+  useEffect(() => {
+    setCatalogImportMergeConfirmed(false)
+
+    if (!catalogImportBusy && catalogImportProgress?.stage === 'done') {
+      setCatalogImportProgress(null)
+      setCatalogImportCompletedTarget(null)
+    }
+  }, [catalogImportTarget, catalogImportNewListLabel, catalogImportBusy, catalogImportProgress?.stage])
+
+  useEffect(() => {
+    const availableLists = getSortedLocalizedLists(
+      buildPopupListOptions(snapshot.lists, listOptions),
       locale,
       t,
     )
@@ -859,7 +1064,7 @@ export function PopupApp() {
         availableLists.find((list) => list.id === 'library')?.id ?? availableLists[0].id
       setSelectedList(preferredDefault)
     }
-  }, [listOptions, locale, selectedList, t])
+  }, [snapshot.lists, listOptions, locale, selectedList, t])
 
   useEffect(() => {
     if (detection) {
@@ -1091,6 +1296,169 @@ export function PopupApp() {
     }
   }
 
+  async function resolveCatalogImportList(): Promise<{ listId: string; label: string }> {
+    const availableLists = getSortedLocalizedLists(
+      buildPopupListOptions(snapshot.lists, listOptions),
+      locale,
+      t,
+    )
+
+    if (catalogImportTarget !== CREATE_NEW_LIST_OPTION) {
+      const existingList = availableLists.find((list) => list.id === catalogImportTarget)
+      return {
+        listId: existingList?.id ?? catalogImportTarget,
+        label: existingList
+          ? getLocalizedListDefinitionLabel(existingList, t)
+          : getLocalizedListLabel(availableLists, catalogImportTarget, t),
+      }
+    }
+
+    const trimmedLabel = catalogImportNewListLabel.trim() || catalogImportSnapshot?.listLabel.trim() || ''
+    if (!trimmedLabel) {
+      throw new Error(t('popup.catalogImportNameRequired'))
+    }
+
+    const matchedList = findExistingListByLabel(availableLists, trimmedLabel, t)
+    if (matchedList) {
+      if (!catalogImportMergeConfirmed) {
+        throw new Error(
+          t('popup.catalogImportDuplicateWarning', {
+            label: getLocalizedListDefinitionLabel(matchedList, t),
+          }),
+        )
+      }
+
+      return {
+        listId: matchedList.id,
+        label: getLocalizedListDefinitionLabel(matchedList, t),
+      }
+    }
+
+    const created = await addList(trimmedLabel)
+    setSnapshot(created.snapshot)
+    setListOptions((current) => buildPopupListOptions(created.snapshot.lists, current))
+    setCatalogImportTarget(created.list.id)
+    setCatalogImportNewListLabel(trimmedLabel)
+
+    return {
+      listId: created.list.id,
+      label: getLocalizedListDefinitionLabel(created.list, t),
+    }
+  }
+
+  async function handleRecoverCatalog(): Promise<void> {
+    if (!catalogImportSnapshot || catalogImportSnapshot.items.length === 0) {
+      return
+    }
+
+    const total = catalogImportSnapshot.items.length
+    setCatalogImportBusy(true)
+    setCatalogImportCompletedTarget(null)
+    setCatalogImportProgress({
+      stage: 'queueing',
+      processed: 0,
+      total,
+    })
+
+    try {
+      const destination = await resolveCatalogImportList()
+      let latestSnapshot = snapshot
+
+      for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
+        const item = catalogImportSnapshot.items[index]
+        setCatalogImportProgress({
+          stage: 'queueing',
+          processed: index,
+          total,
+          label: destination.label,
+        })
+
+        const response = await saveDetection({
+          detection: buildCatalogImportDetection(item, catalogImportSnapshot.sourceSite),
+          listId: destination.listId,
+          metadataSyncStatus: 'pending',
+          skipMetadataLookup: true,
+          disableTemporaryPoster: true,
+        })
+
+        latestSnapshot = response.snapshot
+
+        setCatalogImportProgress({
+          stage: 'queueing',
+          processed: index + 1,
+          total,
+          label: destination.label,
+        })
+      }
+
+      setSnapshot(latestSnapshot)
+      setListOptions((current) => buildPopupListOptions(latestSnapshot.lists, current))
+      setSelectedList(destination.listId)
+      setCatalogImportCompletedTarget(destination)
+
+      for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
+        const item = catalogImportSnapshot.items[index]
+        const detection = buildCatalogImportDetection(item, catalogImportSnapshot.sourceSite)
+
+        setCatalogImportProgress({
+          stage: 'syncing',
+          processed: index,
+          total,
+          label: destination.label,
+        })
+
+        let metadata: MetadataCard | undefined
+        try {
+          metadata = await resolveDetectionMetadata(detection) ?? undefined
+        } catch {
+          metadata = undefined
+        }
+
+        if (metadata) {
+          const response = await saveDetection({
+            detection,
+            listId: destination.listId,
+            metadata,
+            metadataSyncStatus: 'synced',
+            skipMetadataLookup: true,
+            disableTemporaryPoster: true,
+          })
+
+          latestSnapshot = response.snapshot
+          setSnapshot(latestSnapshot)
+          setListOptions((current) => buildPopupListOptions(latestSnapshot.lists, current))
+        }
+
+        setCatalogImportProgress({
+          stage: 'syncing',
+          processed: index + 1,
+          total,
+          label: destination.label,
+        })
+
+        if (index < catalogImportSnapshot.items.length - 1) {
+          await wait(1200)
+        }
+      }
+
+      setCatalogImportProgress({
+        stage: 'done',
+        processed: total,
+        total,
+        label: destination.label,
+      })
+    } catch (error) {
+      setCatalogImportProgress({
+        stage: 'error',
+        processed: 0,
+        total,
+        reason: error instanceof Error ? error.message : 'catalog-import-failed',
+      })
+    } finally {
+      setCatalogImportBusy(false)
+    }
+  }
+
   async function openLibrary(target?: { viewId?: string; catalogId?: string }): Promise<void> {
     await chrome.tabs.create({
       url: buildLibraryUrl(chrome.runtime.getURL('library.html'), target),
@@ -1109,11 +1477,86 @@ export function PopupApp() {
     })
   }
 
+  async function handleCatalogImportAction(): Promise<void> {
+    if (catalogImportCompletedTarget && catalogImportProgress?.stage === 'done') {
+      await openLibrary({
+        viewId: catalogImportCompletedTarget.listId,
+      })
+      return
+    }
+
+    await handleRecoverCatalog()
+  }
+
   const availableLists = getSortedLocalizedLists(
     buildPopupListOptions(snapshot.lists, listOptions),
     locale,
     t,
   )
+  const catalogImportDuplicateList =
+    catalogImportSnapshot && catalogImportTarget === CREATE_NEW_LIST_OPTION
+      ? findExistingListByLabel(
+          availableLists,
+          catalogImportNewListLabel.trim() || catalogImportSnapshot.listLabel,
+          t,
+        ) ?? null
+      : null
+  const catalogImportCount =
+    catalogImportSnapshot?.reportedCount ?? catalogImportSnapshot?.visibleCount ?? 0
+  const catalogImportPreviewItems = catalogImportSnapshot?.items.slice(0, 4) ?? []
+  const catalogImportNeedsNewListName = catalogImportTarget === CREATE_NEW_LIST_OPTION
+  const catalogImportCanRun =
+    !catalogImportBusy &&
+    (!catalogImportNeedsNewListName || Boolean(catalogImportNewListLabel.trim())) &&
+    (!catalogImportDuplicateList || catalogImportMergeConfirmed)
+  const catalogImportButtonLabel =
+    catalogImportCompletedTarget && catalogImportProgress?.stage === 'done'
+      ? t('popup.catalogImportOpenRecovered')
+      : t('popup.catalogImportAction')
+  const catalogImportStatusMessage = (() => {
+    if (!catalogImportSnapshot) {
+      return null
+    }
+
+    if (catalogImportProgress?.stage === 'queueing') {
+      return t('popup.catalogImportQueueing', {
+        current: catalogImportProgress.processed,
+        total: catalogImportProgress.total,
+      })
+    }
+
+    if (catalogImportProgress?.stage === 'syncing') {
+      return t('popup.catalogImportSyncing', {
+        current: catalogImportProgress.processed,
+        total: catalogImportProgress.total,
+      })
+    }
+
+    if (catalogImportProgress?.stage === 'done') {
+      return t('popup.catalogImportDone', {
+        count: catalogImportProgress.total,
+        label: catalogImportProgress.label ?? catalogImportSnapshot.listLabel,
+      })
+    }
+
+    if (catalogImportProgress?.stage === 'error') {
+      return t('popup.catalogImportFailed', {
+        reason: catalogImportProgress.reason ?? 'catalog-import-failed',
+      })
+    }
+
+    return t('popup.catalogImportSummary', {
+      count: catalogImportCount,
+      label: catalogImportSnapshot.listLabel,
+    })
+  })()
+  const catalogImportHintMessage = catalogImportSnapshot
+    ? catalogImportDuplicateList
+      ? t('popup.catalogImportDuplicateWarning', {
+          label: getLocalizedListDefinitionLabel(catalogImportDuplicateList, t),
+        })
+      : t('popup.catalogImportNameSuggestion')
+    : null
   const recentEntries = toLibraryEntries(snapshot).slice(0, 3)
   const sourceHost = detection ? getHostnameLabel(detection.url) : ''
   const currentListLabel = getLocalizedListLabel(availableLists, selectedList, t)
@@ -1465,6 +1908,102 @@ export function PopupApp() {
           </section>
         )}
 
+        {catalogImportSnapshot ? (
+          <section className="popup-hero popup-import-section">
+            <div className="popup-heading-row">
+              <div>
+                <p className="eyebrow">{t('popup.catalogImportKicker')}</p>
+                <h2 className="section-title popup-import-title">{t('popup.catalogImportTitle')}</h2>
+              </div>
+              <span className="section-chip">{catalogImportCount}</span>
+            </div>
+
+            <div className="catalog-import-card">
+              <div className="catalog-import-copy">
+                <strong className="catalog-import-list-label">{catalogImportSnapshot.listLabel}</strong>
+                <p className="muted popup-message">{catalogImportStatusMessage}</p>
+                <p className="tiny catalog-import-hint">{catalogImportHintMessage}</p>
+              </div>
+
+              <div className="popup-section">
+                <label className="label popup-compact-label" htmlFor="catalog-import-target">
+                  {t('popup.catalogImportTargetLabel')}
+                </label>
+                <select
+                  id="catalog-import-target"
+                  className="select"
+                  value={catalogImportTarget}
+                  disabled={catalogImportBusy}
+                  onChange={(event) => setCatalogImportTarget(event.target.value)}
+                >
+                  <option value={CREATE_NEW_LIST_OPTION}>
+                    {t('popup.catalogImportCreateOption')}
+                  </option>
+                  {availableLists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {getLocalizedListDefinitionLabel(list, t)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {catalogImportNeedsNewListName ? (
+                <div className="popup-section">
+                  <label className="label popup-compact-label" htmlFor="catalog-import-new-list">
+                    {t('popup.catalogImportNewListLabel')}
+                  </label>
+                  <input
+                    id="catalog-import-new-list"
+                    className="field"
+                    value={catalogImportNewListLabel}
+                    disabled={catalogImportBusy}
+                    placeholder={t('popup.catalogImportNewListPlaceholder')}
+                    onChange={(event) => setCatalogImportNewListLabel(event.target.value)}
+                  />
+                </div>
+              ) : null}
+
+              {catalogImportDuplicateList ? (
+                <label className="catalog-import-confirm">
+                  <input
+                    type="checkbox"
+                    checked={catalogImportMergeConfirmed}
+                    disabled={catalogImportBusy}
+                    onChange={(event) => setCatalogImportMergeConfirmed(event.target.checked)}
+                  />
+                  <span>{t('popup.catalogImportConfirmMerge')}</span>
+                </label>
+              ) : null}
+
+              {catalogImportPreviewItems.length > 0 ? (
+                <div className="catalog-import-preview">
+                  {catalogImportPreviewItems.map((item) => (
+                    <span key={`${item.sourceId}:${item.title}`} className="popup-title-alias-chip">
+                      {item.title}
+                    </span>
+                  ))}
+                  {catalogImportSnapshot.items.length > catalogImportPreviewItems.length ? (
+                    <span className="popup-title-alias-chip">
+                      {t('popup.catalogImportMore', {
+                        count: catalogImportSnapshot.items.length - catalogImportPreviewItems.length,
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <button
+                className="button catalog-import-button"
+                type="button"
+                disabled={!catalogImportCanRun && !(catalogImportCompletedTarget && catalogImportProgress?.stage === 'done')}
+                onClick={() => void handleCatalogImportAction()}
+              >
+                {catalogImportButtonLabel}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         <div className="popup-recent">
           <div className="section-heading">
             <div>
@@ -1480,63 +2019,80 @@ export function PopupApp() {
               <p className="tiny">{t('popup.noRecentActivityHint')}</p>
             </div>
           ) : (
-            recentEntries.map((entry) => (
-              <article className="recent-card" key={entry.catalog.id}>
-                <div className="recent-art">
-                  <img
-                    className="recent-art-image"
-                    src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)}
-                    alt={`${entry.catalog.title} poster`}
-                  />
-                  {!entry.catalog.poster ? (
-                    <span className="recent-art-fallback">
-                      {getTitleInitials(entry.catalog.title)}
-                    </span>
-                  ) : null}
-                  <span className="recent-art-overlay" />
-                  <span className="recent-play-badge">
-                    <PlayIcon />
-                  </span>
-                  {entry.activity.lastSource?.favicon ? (
-                    <img
-                      className="recent-source-badge"
-                      src={entry.activity.lastSource.favicon}
-                      alt={`${entry.activity.lastSource.siteName} favicon`}
-                      onError={(event) => {
-                        event.currentTarget.src = '/icons/favicon-16x16.png'
-                      }}
-                    />
-                  ) : null}
-                </div>
+            recentEntries.map((entry) => {
+              const syncState = getCatalogSyncState(entry.catalog)
+              const showPendingPlaceholder = syncState === 'pending' && !entry.catalog.poster
 
-                <div className="recent-body">
-                  <div>
-                    <strong className="recent-title">{entry.catalog.title}</strong>
-                    <p className="recent-subtitle">
-                      {getPopupEntryProgressText(entry, t)} /{' '}
-                      {getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}
-                    </p>
-                  </div>
-
-                  <div className="recent-progress">
-                    <div className="recent-progress-copy">
-                      <span>
-                        {getEntryProgressPercent(entry) > 0
-                          ? t('popup.completePercent', { percent: getEntryProgressPercent(entry) })
-                          : t('popup.recentlySaved')}
-                      </span>
-                      <span>{getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}</span>
-                    </div>
-                    <div className="recent-progress-track">
-                      <div
-                        className="recent-progress-value"
-                        style={{ width: `${getEntryProgressPercent(entry)}%` }}
+              return (
+                <article className="recent-card" key={entry.catalog.id}>
+                  <div className="recent-art">
+                    {showPendingPlaceholder ? (
+                      <div className="recent-art-image recent-art-placeholder" aria-hidden="true" />
+                    ) : (
+                      <img
+                        className="recent-art-image"
+                        src={entry.catalog.poster ?? getTemporaryPoster(entry.catalog.normalizedTitle)}
+                        alt={`${entry.catalog.title} poster`}
                       />
+                    )}
+                    {!entry.catalog.poster && !showPendingPlaceholder ? (
+                      <span className="recent-art-fallback">
+                        {getTitleInitials(entry.catalog.title)}
+                      </span>
+                    ) : null}
+                    <span className="recent-art-overlay" />
+                    {syncState ? (
+                      <span className={`catalog-sync-badge recent-sync-badge is-${syncState}`}>
+                        <SyncStatusGlyph
+                          className="catalog-sync-icon"
+                          synced={syncState === 'synced'}
+                        />
+                      </span>
+                    ) : null}
+                    <span className="recent-play-badge">
+                      <PlayIcon />
+                    </span>
+                    {entry.activity.lastSource?.favicon ? (
+                      <img
+                        className="recent-source-badge"
+                        src={entry.activity.lastSource.favicon}
+                        alt={`${entry.activity.lastSource.siteName} favicon`}
+                        onError={(event) => {
+                          event.currentTarget.src = '/icons/favicon-16x16.png'
+                        }}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="recent-body">
+                    <div>
+                      <strong className="recent-title">{entry.catalog.title}</strong>
+                      <p className="recent-subtitle">
+                        {getPopupEntryProgressText(entry, t)} /{' '}
+                        {getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}
+                      </p>
+                    </div>
+
+                    <div className="recent-progress">
+                      <div className="recent-progress-copy">
+                        <span>
+                          {getEntryProgressPercent(entry) > 0
+                            ? t('popup.completePercent', { percent: getEntryProgressPercent(entry) })
+                            : t('popup.recentlySaved')}
+                        </span>
+                        <span>{getLocalizedListLabel(snapshot.lists, entry.activity.status, t)}</span>
+                      </div>
+                      <div className="recent-progress-track">
+                        <div
+                          className="recent-progress-value"
+                          style={{ width: `${getEntryProgressPercent(entry)}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            ))
+                </article>
+              )
+            })
           )}
         </div>
       </div>

@@ -162,6 +162,71 @@ body {
   text-transform: uppercase;
 }
 
+.popup-import-section {
+  gap: 12px;
+}
+
+.popup-import-title {
+  font-size: 1.02rem;
+  color: #f7f5fd;
+}
+
+.catalog-import-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(171, 170, 177, 0.12);
+  background: rgba(18, 19, 25, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 18px 44px rgba(2, 6, 23, 0.26);
+}
+
+.catalog-import-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.catalog-import-list-label {
+  color: #f4f5fb;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.catalog-import-hint {
+  margin: 0;
+}
+
+.catalog-import-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-import-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 125, 125, 0.2);
+  background: rgba(52, 19, 23, 0.34);
+  color: #ffd6d6;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.catalog-import-confirm input {
+  margin-top: 2px;
+}
+
+.catalog-import-button {
+  min-height: 48px;
+}
+
 .capture-card,
 .recent-card,
 .recent-empty-card,
@@ -750,6 +815,10 @@ body {
   will-change: transform;
 }
 
+.recent-art-placeholder {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.94), rgba(10, 10, 14, 0.98));
+}
+
 .capture-card:hover .capture-art-image,
 .capture-card:focus-within .capture-art-image,
 .recent-card:hover .recent-art-image,
@@ -775,6 +844,41 @@ body {
   inset: 0;
   z-index: 1;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.62));
+}
+
+.catalog-sync-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(5, 8, 16, 0.78);
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(6px);
+}
+
+.catalog-sync-badge.is-synced {
+  color: #6bff8f;
+}
+
+.catalog-sync-badge.is-pending {
+  color: #ff7d7d;
+}
+
+.catalog-sync-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.recent-sync-badge {
+  top: 12px;
+  right: 12px;
 }
 
 .recent-body {

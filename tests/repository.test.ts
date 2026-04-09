@@ -180,6 +180,35 @@ describe('WatchLogRepository', () => {
     expect(response.entry.catalog.posterKind).toBe('temporary')
   })
 
+  it('can save imported entries as pending without a temporary poster', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const response = await repository.saveDetection({
+      listId: 'library',
+      metadataSyncStatus: 'pending',
+      skipMetadataLookup: true,
+      disableTemporaryPoster: true,
+      detection: {
+        title: 'Imported Queue Title',
+        normalizedTitle: 'imported queue title',
+        mediaType: 'manga',
+        sourceSite: 'zonatmo.nakamasweb.com',
+        url: 'https://zonatmo.nakamasweb.com/library/manga/123/imported-queue-title',
+        favicon: 'https://zonatmo.nakamasweb.com/favicon.ico',
+        pageTitle: 'Imported Queue Title',
+        progressLabel: 'Sin progreso',
+        confidence: 1,
+      },
+    })
+
+    expect(response.entry.catalog.metadataSyncStatus).toBe('pending')
+    expect(response.entry.catalog.poster).toBeUndefined()
+    expect(response.entry.catalog.posterKind).toBeUndefined()
+  })
+
   it('persists a selected unofficial poster when metadata is unavailable', async () => {
     const repository = new WatchLogRepository(
       new MemoryStorageProvider(),
@@ -422,6 +451,64 @@ describe('WatchLogRepository', () => {
 
     expect(response.entry.catalog.poster).toBe('https://img.anilist.co/dragon-ball.jpg')
     expect(response.entry.catalog.posterKind).toBe('official')
+  })
+
+  it('promotes a pending imported entry to synced when metadata arrives later', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    await repository.saveDetection({
+      listId: 'library',
+      metadataSyncStatus: 'pending',
+      skipMetadataLookup: true,
+      disableTemporaryPoster: true,
+      detection: {
+        title: 'One Piece',
+        normalizedTitle: 'one piece',
+        mediaType: 'manga',
+        sourceSite: 'zonatmo.nakamasweb.com',
+        url: 'https://zonatmo.nakamasweb.com/library/manga/2985/onepunchman',
+        favicon: 'https://zonatmo.nakamasweb.com/favicon.ico',
+        pageTitle: 'One Piece',
+        progressLabel: 'Sin progreso',
+        confidence: 1,
+      },
+    })
+
+    const response = await repository.saveDetection({
+      listId: 'library',
+      metadataSyncStatus: 'synced',
+      skipMetadataLookup: true,
+      disableTemporaryPoster: true,
+      metadata: {
+        id: 'anilist:21',
+        title: 'One Piece',
+        normalizedTitle: 'one piece',
+        mediaType: 'manga',
+        poster: 'https://img.anilist.co/one-piece.jpg',
+        genres: ['Adventure'],
+        description: 'Official metadata',
+        chapterCount: 1100,
+      },
+      detection: {
+        title: 'One Piece',
+        normalizedTitle: 'one piece',
+        mediaType: 'manga',
+        sourceSite: 'zonatmo.nakamasweb.com',
+        url: 'https://zonatmo.nakamasweb.com/library/manga/2985/onepunchman',
+        favicon: 'https://zonatmo.nakamasweb.com/favicon.ico',
+        pageTitle: 'One Piece',
+        progressLabel: 'Sin progreso',
+        confidence: 1,
+      },
+    })
+
+    expect(response.entry.catalog.metadataSyncStatus).toBe('synced')
+    expect(response.entry.catalog.poster).toBe('https://img.anilist.co/one-piece.jpg')
+    expect(response.entry.catalog.posterKind).toBe('official')
+    expect(response.entry.catalog.externalIds.anilist).toBe('21')
   })
 
   it('normalizes completed entries to total over total when the total is known', async () => {

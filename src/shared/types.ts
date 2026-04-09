@@ -17,6 +17,7 @@ export type PublicationStatus =
   | 'HIATUS'
 
 export type PosterKind = 'official' | 'unofficial' | 'temporary'
+export type MetadataSyncStatus = 'pending' | 'synced'
 
 export interface FuzzyDate {
   year?: number
@@ -65,6 +66,7 @@ export interface CatalogEntry {
   aliases?: string[]
   seasonNumber?: number
   mediaType: MediaType
+  metadataSyncStatus?: MetadataSyncStatus
   score?: number
   poster?: string
   posterKind?: PosterKind
@@ -167,6 +169,9 @@ export interface SaveDetectionInput {
   favorite?: boolean
   metadata?: MetadataCard
   posterOverride?: string
+  metadataSyncStatus?: MetadataSyncStatus
+  skipMetadataLookup?: boolean
+  disableTemporaryPoster?: boolean
 }
 
 export interface UpdateEntryInput {
