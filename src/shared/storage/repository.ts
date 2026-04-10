@@ -486,7 +486,59 @@ export class WatchLogRepository {
       return { entry: null, snapshot }
     }
 
+    const metadataRefresh = input.metadataRefresh
     const nextStatus = input.listId ?? activity.status
+    const rawTitle = input.title?.trim()
+    const refreshedTitle = metadataRefresh?.title?.trim()
+    const nextTitle =
+      rawTitle && rawTitle.length > 0
+        ? rawTitle
+        : refreshedTitle && refreshedTitle.length > 0
+          ? refreshedTitle
+          : catalog.title
+    const shouldUpdateTitle = nextTitle !== catalog.title
+    const mediaTypeChanged = input.mediaType !== undefined && input.mediaType !== catalog.mediaType
+
+    const updatedCatalog: CatalogEntry = {
+      ...catalog,
+      title: shouldUpdateTitle ? nextTitle : catalog.title,
+      normalizedTitle: shouldUpdateTitle ? normalizeTitle(nextTitle) : catalog.normalizedTitle,
+      aliases: shouldUpdateTitle
+        ? mergeAlternativeTitles(nextTitle, [catalog.title, ...(catalog.aliases ?? [])])
+        : catalog.aliases,
+      seasonNumber:
+        catalog.seasonNumber ??
+        (metadataRefresh ? getMetadataSeasonNumber(metadataRefresh) : undefined),
+      mediaType: input.mediaType ?? metadataRefresh?.mediaType ?? catalog.mediaType,
+      metadataSyncStatus: metadataRefresh
+        ? 'synced'
+        : mediaTypeChanged
+          ? 'pending'
+          : catalog.metadataSyncStatus,
+      score: metadataRefresh?.score ?? catalog.score,
+      ...resolveCatalogPoster({
+        metadata: metadataRefresh,
+        existingCatalog: catalog,
+        disableTemporaryPoster: true,
+      }),
+      backdrop: metadataRefresh?.backdrop ?? catalog.backdrop,
+      genres:
+        metadataRefresh && metadataRefresh.genres.length > 0
+          ? metadataRefresh.genres
+          : catalog.genres,
+      description: metadataRefresh?.description ?? catalog.description,
+      publicationStatus: metadataRefresh?.publicationStatus ?? catalog.publicationStatus,
+      startDate: metadataRefresh?.startDate ?? catalog.startDate,
+      endDate: metadataRefresh?.endDate ?? catalog.endDate,
+      releaseYear: metadataRefresh?.releaseYear ?? catalog.releaseYear,
+      runtime: metadataRefresh?.runtime ?? catalog.runtime,
+      seasonCount: metadataRefresh?.seasonCount ?? catalog.seasonCount,
+      episodeCount: metadataRefresh?.episodeCount ?? catalog.episodeCount,
+      chapterCount: metadataRefresh?.chapterCount ?? catalog.chapterCount,
+      externalIds: buildExternalIds(catalog.externalIds, metadataRefresh),
+      updatedAt: nowIso(),
+    }
+
     const nextProgress = input.progress
       ? {
           ...activity.currentProgress,
@@ -501,23 +553,9 @@ export class WatchLogRepository {
       status: nextStatus,
       favorite: input.favorite ?? activity.favorite,
       manualNotes: input.manualNotes ?? activity.manualNotes,
-      currentProgress: normalizeEntryProgress(nextProgress, nextStatus, catalog),
+      currentProgress: normalizeEntryProgress(nextProgress, nextStatus, updatedCatalog),
       updatedAt: nowIso(),
     }
-
-    const rawTitle = input.title?.trim()
-    const nextTitle = rawTitle && rawTitle.length > 0 ? rawTitle : catalog.title
-    const shouldUpdateTitle = nextTitle !== catalog.title
-
-    const updatedCatalog: CatalogEntry = shouldUpdateTitle
-      ? {
-          ...catalog,
-          title: nextTitle,
-          normalizedTitle: normalizeTitle(nextTitle),
-          aliases: mergeAlternativeTitles(nextTitle, [catalog.title, ...(catalog.aliases ?? [])]),
-          updatedAt: nowIso(),
-        }
-      : catalog
 
     const nextSnapshot: WatchLogSnapshot = {
       ...snapshot,

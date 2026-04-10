@@ -179,10 +179,12 @@ export interface SaveDetectionInput {
 export interface UpdateEntryInput {
   catalogId: string
   title?: string
+  mediaType?: MediaType
   listId?: string
   favorite?: boolean
   manualNotes?: string
   progress?: Partial<ProgressState>
+  metadataRefresh?: MetadataCard
 }
 
 export interface ExportCatalogPayload {

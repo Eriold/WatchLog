@@ -40,6 +40,7 @@ import type {
   DetectionResult,
   FuzzyDate,
   LibraryEntry,
+  MediaType,
   MetadataCard,
   WatchListDefinition,
   WatchLogSnapshot,
@@ -64,12 +65,25 @@ const FAVORITES_VIEW_ID = 'favorites'
 
 type EntryDraft = {
   title: string
+  mediaType: MediaType
   notes: string
   progressText: string
   progressValue: number | null
   listId: string
   favorite: boolean
 }
+
+const EDITABLE_MEDIA_TYPES: MediaType[] = [
+  'anime',
+  'manga',
+  'manhwa',
+  'manhua',
+  'novel',
+  'series',
+  'movie',
+  'video',
+  'unknown',
+]
 
 function getInitialSnapshot(): WatchLogSnapshot {
   return { catalog: [], activity: [], lists: [] }
@@ -165,6 +179,7 @@ function createEntryDraft(entry: LibraryEntry): EntryDraft {
 
   return {
     title: entry.catalog.title,
+    mediaType: entry.catalog.mediaType,
     notes: entry.activity.manualNotes,
     progressText: progress.progressText,
     progressValue: control?.current ?? null,
@@ -550,6 +565,7 @@ export function SidePanelApp() {
     total: number
   } | null>(null)
   const [catalogSyncSummary, setCatalogSyncSummary] = useState<CatalogSyncSummary | null>(null)
+  const [isEntryAniListRefreshing, setIsEntryAniListRefreshing] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
@@ -565,6 +581,9 @@ export function SidePanelApp() {
     | 'library.entryDeleted'
     | 'library.explorerRefreshed'
     | 'library.addedToLibrary'
+    | 'library.anilistRefreshRunning'
+    | 'library.anilistRefreshDone'
+    | 'library.anilistRefreshNoMatch'
     params?: Record<string, string>
   }>({ key: 'library.loading' })
 
@@ -1033,12 +1052,16 @@ export function SidePanelApp() {
     }
   }
 
-  async function handleSaveEntry(): Promise<void> {
-    if (!selectedEntry || !selectedDraft) return
+  function buildSelectedDraftProgress(): ReturnType<typeof getResolvedProgressState> | null {
+    if (!selectedEntry || !selectedDraft) {
+      return null
+    }
+
     const currentProgress = getEntryDisplayProgress(selectedEntry)
     const progressControl = getStructuredProgressControl(currentProgress)
-    const nextProgress = progressControl
-      ? buildProgressStateFromControl(
+
+    if (progressControl) {
+      return buildProgressStateFromControl(
         currentProgress,
         selectedDraft.listId,
         progressControl,
@@ -1046,24 +1069,100 @@ export function SidePanelApp() {
           ? progressControl.total
           : selectedDraft.progressValue ?? progressControl.current,
       )
-      : getResolvedProgressState(
-        {
-          ...currentProgress,
-          progressText: selectedDraft.progressText,
+    }
+
+    return getResolvedProgressState(
+      {
+        ...currentProgress,
+        progressText: selectedDraft.progressText,
+      },
+      selectedDraft.listId,
+      {
+        episodeCount: selectedEntry.catalog.episodeCount,
+        chapterCount: selectedEntry.catalog.chapterCount,
+      },
+    )
+  }
+
+  async function handleRefreshEntryAniList(): Promise<void> {
+    if (!selectedEntry || !selectedDraft || isEntryAniListRefreshing) {
+      return
+    }
+
+    if (!['anime', 'manga', 'manhwa', 'manhua'].includes(selectedDraft.mediaType)) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: t('library.syncReasonUnsupportedType', {
+            type: getLocalizedMediaTypeLabel(selectedDraft.mediaType, t),
+          }),
         },
-        selectedDraft.listId,
-        {
-          episodeCount: selectedEntry.catalog.episodeCount,
-          chapterCount: selectedEntry.catalog.chapterCount,
+      })
+      return
+    }
+
+    setIsEntryAniListRefreshing(true)
+    setStatusMessageState({ key: 'library.anilistRefreshRunning' })
+
+    try {
+      const detection = {
+        ...buildDetectionForCatalogSync(selectedEntry),
+        mediaType: selectedDraft.mediaType,
+      }
+      const metadata = await resolveDetectionMetadata(detection)
+
+      if (!metadata) {
+        setStatusMessageState({ key: 'library.anilistRefreshNoMatch' })
+        return
+      }
+
+      const nextProgress = buildSelectedDraftProgress()
+      const response = await updateEntry({
+        catalogId: selectedEntry.catalog.id,
+        title: selectedDraft.title,
+        mediaType: selectedDraft.mediaType,
+        listId: selectedDraft.listId,
+        favorite: selectedDraft.favorite,
+        manualNotes: selectedDraft.notes,
+        progress: nextProgress ?? undefined,
+        metadataRefresh: metadata,
+      })
+
+      setSnapshot(response.snapshot)
+      const persistedEntry = response.entry
+      if (persistedEntry) {
+        setDrafts((current) => ({
+          ...current,
+          [persistedEntry.catalog.id]: createEntryDraft(persistedEntry),
+        }))
+      }
+      setSelectedEntryMetadata(metadata)
+      setStatusMessageState({ key: 'library.anilistRefreshDone' })
+    } catch (error) {
+      setStatusMessageState({
+        key: 'library.errorWithReason',
+        params: {
+          reason: t('library.syncReasonRequestFailed', {
+            reason: error instanceof Error ? error.message : 'anilist-refresh-failed',
+          }),
         },
-      )
+      })
+    } finally {
+      setIsEntryAniListRefreshing(false)
+    }
+  }
+
+  async function handleSaveEntry(): Promise<void> {
+    if (!selectedEntry || !selectedDraft) return
+    const nextProgress = buildSelectedDraftProgress()
     const response = await updateEntry({
       catalogId: selectedEntry.catalog.id,
       title: selectedDraft.title,
+      mediaType: selectedDraft.mediaType,
       listId: selectedDraft.listId,
       favorite: selectedDraft.favorite,
       manualNotes: selectedDraft.notes,
-      progress: nextProgress,
+      progress: nextProgress ?? undefined,
     })
     setSnapshot(response.snapshot)
     const persistedEntry = response.entry
@@ -1619,8 +1718,8 @@ export function SidePanelApp() {
           <>
             <div className="entry-detail-header">
               <div className="entry-detail-badges">
-                <span className={`media-badge ${getMediaTypeBadgeClass(selectedEntry.catalog.mediaType)}`}>
-                  {getLocalizedMediaTypeLabel(selectedEntry.catalog.mediaType, t)}
+                <span className={`media-badge ${getMediaTypeBadgeClass(selectedDraft.mediaType)}`}>
+                  {getLocalizedMediaTypeLabel(selectedDraft.mediaType, t)}
                 </span>
                 <span className="media-badge tone-planned">
                   {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
@@ -1697,6 +1796,14 @@ export function SidePanelApp() {
                 <button className="button" type="button" onClick={handleSaveEntry}>
                   {t('library.saveChanges')}
                 </button>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={isEntryAniListRefreshing}
+                  onClick={() => void handleRefreshEntryAniList()}
+                >
+                  {isEntryAniListRefreshing ? t('library.anilistRefreshRunning') : t('library.anilistRefreshAction')}
+                </button>
                 {selectedEntry.activity.lastSource?.url ? (
                   <a
                     className="button secondary"
@@ -1731,6 +1838,19 @@ export function SidePanelApp() {
                     className="field"
                     value={selectedDraft.title}
                     onChange={(event) => updateDraft({ title: event.target.value })}
+                  />
+                </div>
+                <div className="field-card">
+                  <label className="label">
+                    {t('library.categoryTag')}
+                  </label>
+                  <CustomSelect
+                    value={selectedDraft.mediaType}
+                    onChange={(value) => updateDraft({ mediaType: value as MediaType })}
+                    options={EDITABLE_MEDIA_TYPES.map((mediaType) => ({
+                      value: mediaType,
+                      label: `${t('library.typePrefix')}: ${getLocalizedMediaTypeLabel(mediaType, t)}`,
+                    }))}
                   />
                 </div>
                 <div className="field-card">
