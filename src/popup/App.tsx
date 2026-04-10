@@ -130,7 +130,7 @@ interface PopupPosterCandidate {
 const CREATE_NEW_LIST_OPTION = '__create_new_list__'
 
 interface CatalogImportProgressState {
-  stage: 'queueing' | 'syncing' | 'done' | 'error'
+  stage: 'queueing' | 'done' | 'error'
   processed: number
   total: number
   label?: string
@@ -325,10 +325,6 @@ function buildCatalogImportDetection(
     progressLabel: 'Sin progreso',
     confidence: 1,
   }
-}
-
-async function wait(ms: number): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function inferCatalogListMediaType(items: ZonaTmoCatalogImportItem[]): MediaType | undefined {
@@ -1448,55 +1444,6 @@ export function PopupApp() {
       setSelectedList(destination.listId)
       setCatalogImportCompletedTarget(destination)
 
-      for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
-        const item = catalogImportSnapshot.items[index]
-        const detection = buildCatalogImportDetection(
-          item,
-          catalogImportSnapshot.sourceSite,
-          listMediaType,
-        )
-
-        setCatalogImportProgress({
-          stage: 'syncing',
-          processed: index,
-          total,
-          label: destination.label,
-        })
-
-        let metadata: MetadataCard | undefined
-        try {
-          metadata = await resolveDetectionMetadata(detection) ?? undefined
-        } catch {
-          metadata = undefined
-        }
-
-        if (metadata) {
-          const response = await saveDetection({
-            detection,
-            listId: destination.listId,
-            metadata,
-            metadataSyncStatus: 'synced',
-            skipMetadataLookup: true,
-            disableTemporaryPoster: true,
-          })
-
-          latestSnapshot = response.snapshot
-          setSnapshot(latestSnapshot)
-          setListOptions((current) => buildPopupListOptions(latestSnapshot.lists, current))
-        }
-
-        setCatalogImportProgress({
-          stage: 'syncing',
-          processed: index + 1,
-          total,
-          label: destination.label,
-        })
-
-        if (index < catalogImportSnapshot.items.length - 1) {
-          await wait(1200)
-        }
-      }
-
       setCatalogImportProgress({
         stage: 'done',
         processed: total,
@@ -1581,13 +1528,6 @@ export function PopupApp() {
 
     if (catalogImportProgress?.stage === 'queueing') {
       return t('popup.catalogImportQueueing', {
-        current: catalogImportProgress.processed,
-        total: catalogImportProgress.total,
-      })
-    }
-
-    if (catalogImportProgress?.stage === 'syncing') {
-      return t('popup.catalogImportSyncing', {
         current: catalogImportProgress.processed,
         total: catalogImportProgress.total,
       })

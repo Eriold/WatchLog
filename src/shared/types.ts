@@ -176,6 +176,7 @@ export interface SaveDetectionInput {
 
 export interface UpdateEntryInput {
   catalogId: string
+  title?: string
   listId?: string
   favorite?: boolean
   manualNotes?: string

@@ -61,6 +61,7 @@ const ALL_TITLES_VIEW_ID = 'all-titles'
 const FAVORITES_VIEW_ID = 'favorites'
 
 type EntryDraft = {
+  title: string
   notes: string
   progressText: string
   progressValue: number | null
@@ -161,6 +162,7 @@ function createEntryDraft(entry: LibraryEntry): EntryDraft {
   const control = getStructuredProgressControl(progress)
 
   return {
+    title: entry.catalog.title,
     notes: entry.activity.manualNotes,
     progressText: progress.progressText,
     progressValue: control?.current ?? null,
@@ -1055,6 +1057,7 @@ export function SidePanelApp() {
       )
     const response = await updateEntry({
       catalogId: selectedEntry.catalog.id,
+      title: selectedDraft.title,
       listId: selectedDraft.listId,
       favorite: selectedDraft.favorite,
       manualNotes: selectedDraft.notes,
@@ -1706,6 +1709,17 @@ export function SidePanelApp() {
               </div>
 
               <div className="entry-detail-grid">
+                <div className="field-card field-card-wide">
+                  <label className="label" htmlFor="entry-title">
+                    {t('popup.titleLabel')}
+                  </label>
+                  <input
+                    id="entry-title"
+                    className="field"
+                    value={selectedDraft.title}
+                    onChange={(event) => updateDraft({ title: event.target.value })}
+                  />
+                </div>
                 <div className="field-card">
                   <label className="label" htmlFor="entry-list">
                     {t('library.primaryList')}

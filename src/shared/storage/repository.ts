@@ -499,8 +499,25 @@ export class WatchLogRepository {
       updatedAt: nowIso(),
     }
 
+    const rawTitle = input.title?.trim()
+    const nextTitle = rawTitle && rawTitle.length > 0 ? rawTitle : catalog.title
+    const shouldUpdateTitle = nextTitle !== catalog.title
+
+    const updatedCatalog: CatalogEntry = shouldUpdateTitle
+      ? {
+          ...catalog,
+          title: nextTitle,
+          normalizedTitle: normalizeTitle(nextTitle),
+          aliases: mergeAlternativeTitles(nextTitle, [catalog.title, ...(catalog.aliases ?? [])]),
+          updatedAt: nowIso(),
+        }
+      : catalog
+
     const nextSnapshot: WatchLogSnapshot = {
       ...snapshot,
+      catalog: snapshot.catalog.map((item) =>
+        item.id === input.catalogId ? updatedCatalog : item,
+      ),
       activity: snapshot.activity.map((item) =>
         item.catalogId === input.catalogId ? updatedActivity : item,
       ),

@@ -101,7 +101,8 @@ export const translations = {
     'popup.catalogImportOpenRecovered': 'Open recovered titles',
     'popup.catalogImportQueueing': 'Saving detected titles locally {current}/{total}...',
     'popup.catalogImportSyncing': 'Syncing AniList metadata {current}/{total}...',
-    'popup.catalogImportDone': 'Recovered {count} titles into {label}.',
+    'popup.catalogImportDone':
+      'Recovered {count} titles into {label}. Sync pending from the Library panel.',
     'popup.catalogImportFailed': 'Could not recover the catalog: {reason}',
     'popup.catalogImportNameRequired': 'Choose or type a destination list first.',
     'popup.catalogImportMore': '+{count} more',
@@ -369,7 +370,8 @@ export const translations = {
     'popup.catalogImportOpenRecovered': 'Abrir recuperados',
     'popup.catalogImportQueueing': 'Guardando titulos detectados localmente {current}/{total}...',
     'popup.catalogImportSyncing': 'Sincronizando metadata de AniList {current}/{total}...',
-    'popup.catalogImportDone': 'Se recuperaron {count} titulos en {label}.',
+    'popup.catalogImportDone':
+      'Se recuperaron {count} titulos en {label}. Sincroniza pendientes desde el panel Library.',
     'popup.catalogImportFailed': 'No se pudo recuperar el catalogo: {reason}',
     'popup.catalogImportNameRequired': 'Primero elige o escribe una lista destino.',
     'popup.catalogImportMore': '+{count} mas',
