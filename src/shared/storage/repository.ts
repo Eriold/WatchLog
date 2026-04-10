@@ -165,7 +165,13 @@ function findCatalogMatch(
   }
 
   return snapshot.catalog.find((item) => {
+    const mediaTypesAreCompatible =
+      targetMediaType === 'unknown' ||
+      item.mediaType === 'unknown' ||
+      areMediaTypesCompatible(item.mediaType, targetMediaType)
+
     return (
+      mediaTypesAreCompatible &&
       areSeasonNumbersCompatible(getSnapshotCatalogSeasonNumber(item), targetSeasonNumber) &&
       targetTitles.includes(item.normalizedTitle)
     )

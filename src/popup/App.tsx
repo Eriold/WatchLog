@@ -135,6 +135,12 @@ interface CatalogImportProgressState {
   total: number
   label?: string
   reason?: string
+  summary?: {
+    created: number
+    moved: number
+    reused: number
+    omitted: number
+  }
 }
 
 function getHostnameLabel(url: string): string {
@@ -1407,9 +1413,38 @@ export function PopupApp() {
     try {
       const destination = await resolveCatalogImportList()
       let latestSnapshot = snapshot
+      const importSummary = {
+        created: 0,
+        moved: 0,
+        reused: 0,
+        omitted: 0,
+      }
 
       for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
         const item = catalogImportSnapshot.items[index]
+        const detection = buildCatalogImportDetection(
+          item,
+          catalogImportSnapshot.sourceSite,
+          listMediaType,
+        )
+        const existingWithSameType = toLibraryEntries(latestSnapshot).find((entry) => {
+          return (
+            entry.catalog.mediaType === detection.mediaType &&
+            entry.catalog.normalizedTitle === detection.normalizedTitle
+          )
+        })
+
+        if (existingWithSameType?.activity.status === destination.listId) {
+          importSummary.omitted += 1
+          setCatalogImportProgress({
+            stage: 'queueing',
+            processed: index + 1,
+            total,
+            label: destination.label,
+          })
+          continue
+        }
+
         setCatalogImportProgress({
           stage: 'queueing',
           processed: index,
@@ -1417,17 +1452,25 @@ export function PopupApp() {
           label: destination.label,
         })
 
+        const previousCatalogCount = latestSnapshot.catalog.length
+        const previousActivity = latestSnapshot.activity.find(
+          (activity) => activity.catalogId === existingWithSameType?.catalog.id,
+        )
         const response = await saveDetection({
-          detection: buildCatalogImportDetection(
-            item,
-            catalogImportSnapshot.sourceSite,
-            listMediaType,
-          ),
+          detection,
           listId: destination.listId,
           metadataSyncStatus: 'pending',
           skipMetadataLookup: true,
           disableTemporaryPoster: true,
         })
+
+        if (response.snapshot.catalog.length > previousCatalogCount) {
+          importSummary.created += 1
+        } else if (previousActivity && previousActivity.status !== destination.listId) {
+          importSummary.moved += 1
+        } else {
+          importSummary.reused += 1
+        }
 
         latestSnapshot = response.snapshot
 
@@ -1449,6 +1492,7 @@ export function PopupApp() {
         processed: total,
         total,
         label: destination.label,
+        summary: importSummary,
       })
     } catch (error) {
       setCatalogImportProgress({
@@ -1552,11 +1596,18 @@ export function PopupApp() {
     })
   })()
   const catalogImportHintMessage = catalogImportSnapshot
-    ? catalogImportDuplicateList
-      ? t('popup.catalogImportDuplicateWarning', {
-          label: getLocalizedListDefinitionLabel(catalogImportDuplicateList, t),
+    ? catalogImportProgress?.stage === 'done' && catalogImportProgress.summary
+      ? t('popup.catalogImportDoneBreakdown', {
+          created: catalogImportProgress.summary.created,
+          moved: catalogImportProgress.summary.moved,
+          reused: catalogImportProgress.summary.reused,
+          omitted: catalogImportProgress.summary.omitted,
         })
-      : t('popup.catalogImportNameSuggestion')
+      : catalogImportDuplicateList
+        ? t('popup.catalogImportDuplicateWarning', {
+            label: getLocalizedListDefinitionLabel(catalogImportDuplicateList, t),
+          })
+        : t('popup.catalogImportNameSuggestion')
     : null
   const recentEntries = toLibraryEntries(snapshot).slice(0, 3)
   const sourceHost = detection ? getHostnameLabel(detection.url) : ''
