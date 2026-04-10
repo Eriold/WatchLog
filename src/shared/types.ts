@@ -3,6 +3,8 @@ export type MediaType =
   | 'series'
   | 'anime'
   | 'manga'
+  | 'manhwa'
+  | 'manhua'
   | 'novel'
   | 'video'
   | 'unknown'

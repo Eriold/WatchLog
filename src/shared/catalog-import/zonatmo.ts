@@ -165,6 +165,14 @@ export function extractZonaTmoCatalogSnapshot(
       return 'novel'
     }
 
+    if (/\bmanhwa\b/.test(value)) {
+      return 'manhwa'
+    }
+
+    if (/\bmanhua\b/.test(value)) {
+      return 'manhua'
+    }
+
     if (/\b(?:manga|manhwa|manhua)\b/.test(value)) {
       return 'manga'
     }

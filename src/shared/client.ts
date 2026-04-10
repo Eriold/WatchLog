@@ -106,7 +106,7 @@ export async function getMetadataForCatalogEntry(
     }
   }
 
-  if (!['anime', 'manga'].includes(catalog.mediaType)) {
+  if (!['anime', 'manga', 'manhwa', 'manhua'].includes(catalog.mediaType)) {
     return undefined
   }
 

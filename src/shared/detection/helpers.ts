@@ -307,13 +307,24 @@ export function inferMediaType(
       hintText,
     )
   const looksLikeNovelSite = /\b(?:novel|ranobe|light\s*novel|web\s*novel)\b/i.test(hintText)
+  const inferTextMangaSubtype = (): MediaType => {
+    if (/\bmanhwa\b/i.test(hintText)) {
+      return 'manhwa'
+    }
+
+    if (/\bmanhua\b/i.test(hintText)) {
+      return 'manhua'
+    }
+
+    return 'manga'
+  }
 
   if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
     return 'video'
   }
 
   if (parsed.chapter) {
-    return looksLikeNovelSite ? 'novel' : 'manga'
+    return looksLikeNovelSite ? 'novel' : inferTextMangaSubtype()
   }
 
   if (parsed.season || parsed.episode) {
@@ -325,7 +336,7 @@ export function inferMediaType(
   }
 
   if (looksLikeMangaSite) {
-    return 'manga'
+    return inferTextMangaSubtype()
   }
 
   if (looksLikeNovelSite) {

@@ -424,7 +424,7 @@ function shouldResolveMetadataForPopup(
       ? matchedEntry.catalog.mediaType
       : detection.mediaType
 
-  if (!['anime', 'manga'].includes(mediaType)) {
+  if (!['anime', 'manga', 'manhwa', 'manhua'].includes(mediaType)) {
     return false
   }
 

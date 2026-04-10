@@ -31,6 +31,7 @@ import {
 } from '../shared/season'
 import { findMatchingLibraryEntryForMetadata, toLibraryEntries } from '../shared/selectors'
 import { getTemporaryPoster } from '../shared/mock-posters'
+import { areMediaTypesCompatible } from '../shared/metadata/matching'
 import {
   isCatalogMetadataPending,
   isCatalogMetadataSynced,
@@ -1130,7 +1131,7 @@ export function SidePanelApp() {
         let failureReason: string | null = null
 
         try {
-          if (!['anime', 'manga'].includes(entry.catalog.mediaType)) {
+          if (!['anime', 'manga', 'manhwa', 'manhua'].includes(entry.catalog.mediaType)) {
             failureReason = t('library.syncReasonUnsupportedType', {
               type: getLocalizedMediaTypeLabel(entry.catalog.mediaType, t),
             })
@@ -1139,7 +1140,7 @@ export function SidePanelApp() {
             const metadata = await resolveDetectionMetadata(detection)
             if (!metadata) {
               failureReason = t('library.syncReasonNoMatch')
-            } else if (metadata.mediaType !== entry.catalog.mediaType) {
+            } else if (!areMediaTypesCompatible(metadata.mediaType, entry.catalog.mediaType)) {
               failureReason = t('library.syncReasonTypeMismatch', {
                 expected: getLocalizedMediaTypeLabel(entry.catalog.mediaType, t),
                 received: getLocalizedMediaTypeLabel(metadata.mediaType, t),

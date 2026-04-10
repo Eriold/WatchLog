@@ -623,6 +623,20 @@
   --badge-glow-strong: rgba(250, 68, 140, 0.24);
 }
 
+.media-badge.type-manhwa {
+  --badge-fill: rgba(56, 189, 248, 0.70);
+  --badge-border: rgba(56, 189, 248, 0.82);
+  --badge-glow-soft: rgba(56, 189, 248, 0.36);
+  --badge-glow-strong: rgba(56, 189, 248, 0.24);
+}
+
+.media-badge.type-manhua {
+  --badge-fill: rgba(251, 146, 60, 0.72);
+  --badge-border: rgba(251, 146, 60, 0.84);
+  --badge-glow-soft: rgba(251, 146, 60, 0.34);
+  --badge-glow-strong: rgba(251, 146, 60, 0.24);
+}
+
 .media-badge.type-movie {
   --badge-fill: rgba(254, 200, 89, 0.70);
   --badge-border: rgba(254, 200, 89, 0.82);

@@ -81,6 +81,16 @@ export function areMediaTypesCompatible(left: MediaType, right: MediaType): bool
     ['series', 'anime'],
     ['novel', 'manga'],
     ['manga', 'novel'],
+    ['novel', 'manhwa'],
+    ['manhwa', 'novel'],
+    ['novel', 'manhua'],
+    ['manhua', 'novel'],
+    ['manga', 'manhwa'],
+    ['manhwa', 'manga'],
+    ['manga', 'manhua'],
+    ['manhua', 'manga'],
+    ['manhwa', 'manhua'],
+    ['manhua', 'manhwa'],
   ]
 
   return compatibilityPairs.some(([source, target]) => source === left && target === right)
@@ -270,7 +280,13 @@ export function pickBestMetadataMatch(
               : -36
       const providerBias =
         item.id.startsWith('anilist:') &&
-        preferredMediaTypes.some((mediaType) => mediaType === 'anime' || mediaType === 'manga')
+        preferredMediaTypes.some(
+          (mediaType) =>
+            mediaType === 'anime' ||
+            mediaType === 'manga' ||
+            mediaType === 'manhwa' ||
+            mediaType === 'manhua',
+        )
           ? 3
           : 0
 

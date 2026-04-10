@@ -19,6 +19,8 @@ const MEDIA_TYPE_KEYS = {
   series: 'media.series',
   anime: 'media.anime',
   manga: 'media.manga',
+  manhwa: 'media.manhwa',
+  manhua: 'media.manhua',
   novel: 'media.novel',
   video: 'media.video',
   unknown: 'media.unknown',
