@@ -55,6 +55,7 @@ import {
 } from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
+import { CustomSelect } from '../shared/ui/CustomSelect'
 import { TranslatedDescription } from '../shared/ui/TranslatedDescription'
 import './sidepanel.css'
 
@@ -1352,28 +1353,35 @@ export function SidePanelApp() {
               {selectedViewId !== EXPLORER_TAB_ID ? (
                 <>
                   <label className="library-filter-chip">
-                    <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                      <option value="all">{t('library.typeAll')}</option>
-                      {typeOptions.map((mediaType) => (
-                        <option key={mediaType} value={mediaType}>
-                          {`${t('library.typePrefix')}: ${getLocalizedMediaTypeLabel(
+                    <CustomSelect
+                      value={typeFilter}
+                      onChange={setTypeFilter}
+                      options={[
+                        { value: 'all', label: t('library.typeAll') },
+                        ...typeOptions.map((mediaType) => ({
+                          value: mediaType,
+                          label: `${t('library.typePrefix')}: ${getLocalizedMediaTypeLabel(
                             mediaType as LibraryEntry['catalog']['mediaType'],
                             t,
-                          )}`}
-                        </option>
-                      ))}
-                    </select>
+                          )}`,
+                        })),
+                      ]}
+                    />
                   </label>
                   <label className="library-filter-chip">
-                    <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                      <option value="all">{t('library.platformAny')}</option>
-                      {sourceOptions.map((source) => (
-                        <option key={source} value={source}>
-                          {`${t('library.platformPrefix')}: ${source === 'Unknown' ? t('common.unknown') : source
-                            }`}
-                        </option>
-                      ))}
-                    </select>
+                    <CustomSelect
+                      value={sourceFilter}
+                      onChange={setSourceFilter}
+                      options={[
+                        { value: 'all', label: t('library.platformAny') },
+                        ...sourceOptions.map((source) => ({
+                          value: source,
+                          label: `${t('library.platformPrefix')}: ${
+                            source === 'Unknown' ? t('common.unknown') : source
+                          }`,
+                        })),
+                      ]}
+                    />
                   </label>
                 </>
               ) : null}
@@ -1382,11 +1390,15 @@ export function SidePanelApp() {
             <div className="library-filter-group">
               {selectedViewId !== EXPLORER_TAB_ID ? (
                 <label className="library-filter-chip">
-                  <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                    <option value="recent">{t('library.sortRecents')}</option>
-                    <option value="title">{t('library.sortTitle')}</option>
-                    <option value="progress">{t('library.sortProgress')}</option>
-                  </select>
+                  <CustomSelect
+                    value={sortBy}
+                    onChange={setSortBy}
+                    options={[
+                      { value: 'recent', label: t('library.sortRecents') },
+                      { value: 'title', label: t('library.sortTitle') },
+                      { value: 'progress', label: t('library.sortProgress') },
+                    ]}
+                  />
                 </label>
               ) : null}
               {selectedViewId !== EXPLORER_TAB_ID ? (
@@ -1722,34 +1734,28 @@ export function SidePanelApp() {
                   />
                 </div>
                 <div className="field-card">
-                  <label className="label" htmlFor="entry-list">
+                  <label className="label">
                     {t('library.primaryList')}
                   </label>
-                  <select
-                    id="entry-list"
-                    className="select"
+                  <CustomSelect
                     value={selectedDraft.listId}
-                    onChange={(event) => updateDraft({ listId: event.target.value })}
-                  >
-                    {snapshot.lists.map((list) => (
-                      <option key={list.id} value={list.id}>
-                        {getLocalizedListDefinitionLabel(list, t)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => updateDraft({ listId: value })}
+                    options={snapshot.lists.map((list) => ({
+                      value: list.id,
+                      label: getLocalizedListDefinitionLabel(list, t),
+                    }))}
+                  />
                 </div>
                 <div className="field-card">
-                  <label className="label" htmlFor="entry-progress">
+                  <label className="label">
                     {t('popup.progressLabel')}
                   </label>
                   {selectedEntryProgressControl ? (
-                    <select
-                      id="entry-progress"
-                      className="select"
+                    <CustomSelect
                       value={selectedEntryProgressSelectValue}
                       disabled={selectedDraft.listId === 'completed'}
-                      onChange={(event) => {
-                        const value = Number.parseInt(event.target.value, 10)
+                      onChange={(nextValue) => {
+                        const value = Number.parseInt(nextValue, 10)
                         updateDraft({
                           progressValue: Number.isNaN(value) ? selectedEntryProgressControl.current : value,
                           progressText: getStructuredProgressText(
@@ -1758,16 +1764,14 @@ export function SidePanelApp() {
                           ),
                         })
                       }}
-                    >
-                      {Array.from(
+                      options={Array.from(
                         { length: selectedEntryProgressControl.total + 1 },
                         (_, index) => index,
-                      ).map((value) => (
-                        <option key={value} value={value}>
-                          {getStructuredProgressText(value, selectedEntryProgressControl.total)}
-                        </option>
-                      ))}
-                    </select>
+                      ).map((value) => ({
+                        value: String(value),
+                        label: getStructuredProgressText(value, selectedEntryProgressControl.total),
+                      }))}
+                    />
                   ) : (
                     <input
                       id="entry-progress"

@@ -57,6 +57,7 @@ import {
   getSortedLocalizedLists,
 } from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
+import { CustomSelect } from '../shared/ui/CustomSelect'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import './popup.css'
 
@@ -1831,21 +1832,17 @@ export function PopupApp() {
 
                   <div className="popup-grid capture-controls">
                     <div className="control-panel">
-                      <label className="label popup-compact-label" htmlFor="list">
+                      <label className="label popup-compact-label">
                         {t('popup.listLabel')}
                       </label>
-                      <select
-                        id="list"
-                        className="select"
+                      <CustomSelect
                         value={selectedList}
-                        onChange={(event) => setSelectedList(event.target.value)}
-                      >
-                        {availableLists.map((list) => (
-                          <option key={list.id} value={list.id}>
-                            {getLocalizedListDefinitionLabel(list, t)}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setSelectedList}
+                        options={availableLists.map((list) => ({
+                          value: list.id,
+                          label: getLocalizedListDefinitionLabel(list, t),
+                        }))}
+                      />
                     </div>
 
                     <div className="control-panel">
@@ -1973,25 +1970,24 @@ export function PopupApp() {
               </div>
 
               <div className="popup-section">
-                <label className="label popup-compact-label" htmlFor="catalog-import-target">
+                <label className="label popup-compact-label">
                   {t('popup.catalogImportTargetLabel')}
                 </label>
-                <select
-                  id="catalog-import-target"
-                  className="select"
+                <CustomSelect
                   value={catalogImportTarget}
                   disabled={catalogImportBusy}
-                  onChange={(event) => setCatalogImportTarget(event.target.value)}
-                >
-                  <option value={CREATE_NEW_LIST_OPTION}>
-                    {t('popup.catalogImportCreateOption')}
-                  </option>
-                  {availableLists.map((list) => (
-                    <option key={list.id} value={list.id}>
-                      {getLocalizedListDefinitionLabel(list, t)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCatalogImportTarget}
+                  options={[
+                    {
+                      value: CREATE_NEW_LIST_OPTION,
+                      label: t('popup.catalogImportCreateOption'),
+                    },
+                    ...availableLists.map((list) => ({
+                      value: list.id,
+                      label: getLocalizedListDefinitionLabel(list, t),
+                    })),
+                  ]}
+                />
               </div>
 
               {catalogImportNeedsNewListName ? (

@@ -69,8 +69,11 @@ body {
   min-width: 0;
 }
 
-.popup-language-select .select {
+.popup-language-select .custom-select {
   min-width: 152px;
+}
+
+.popup-language-select .select-trigger {
   padding: 10px 14px;
   border-radius: 16px;
 }

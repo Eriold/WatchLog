@@ -1,6 +1,6 @@
-import { useId } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { LocalePreference } from '../i18n/translations'
+import { CustomSelect } from './CustomSelect'
 
 interface LanguageSelectProps {
   className?: string
@@ -9,22 +9,22 @@ interface LanguageSelectProps {
 
 export function LanguageSelect({ className, compact = false }: LanguageSelectProps) {
   const { browserLocale, preference, setPreference, t } = useI18n()
-  const selectId = useId()
   const autoLabel = browserLocale === 'es' ? t('language.spanish') : t('language.english')
 
   return (
-    <label className={className} htmlFor={selectId}>
+    <label className={className}>
       {!compact ? <span className="label">{t('language.label')}</span> : null}
-      <select
-        id={selectId}
-        className={`select ${compact ? 'compact-language-select' : ''}`}
+      <CustomSelect
+        className={compact ? 'compact-language-select' : undefined}
         value={preference}
-        onChange={(event) => void setPreference(event.target.value as LocalePreference)}
-      >
-        <option value="auto">{autoLabel}</option>
-        <option value="en">{t('language.english')}</option>
-        <option value="es">{t('language.spanish')}</option>
-      </select>
+        ariaLabel={t('language.label')}
+        onChange={(value) => void setPreference(value as LocalePreference)}
+        options={[
+          { value: 'auto', label: autoLabel },
+          { value: 'en', label: t('language.english') },
+          { value: 'es', label: t('language.spanish') },
+        ]}
+      />
     </label>
   )
 }

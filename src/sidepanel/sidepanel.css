@@ -334,8 +334,11 @@
   margin: 0;
 }
 
-.library-language-select .select {
+.library-language-select .custom-select {
   min-width: 128px;
+}
+
+.library-language-select .select-trigger {
   min-height: 42px;
   border-radius: 999px;
 }
@@ -357,12 +360,11 @@
   text-transform: uppercase;
 }
 
-.library-search input,
-.library-filter-chip select {
+.library-search input {
   width: 100%;
   border: 0;
   outline: none;
-  background: #1d1e26;
+  background: transparent;
   color: #f5f7fd;
   font: inherit;
   letter-spacing: normal;
@@ -374,8 +376,8 @@
 
 /* Contenedor visual del select */
 .library-filter-chip {
-  display: inline-block;
-  position: relative;
+  display: inline-flex;
+  align-items: center;
   min-width: 220px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -387,46 +389,54 @@
 /* Hover del contenedor */
 .library-filter-chip:hover {
   border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.144);
 }
 
 /* Focus real sobre el label cuando el select interno recibe focus */
 .library-filter-chip:focus-within {
+  background: rgba(255, 255, 255, 0.144);
   border-color: rgba(130, 170, 255, 0.45);
   box-shadow: 0 0 0 3px rgba(130, 170, 255, 0.12);
 }
 
 /* Select */
-.library-filter-chip select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  cursor: pointer;
-  display: block;
+.library-filter-chip .custom-select {
+  min-width: 220px;
+}
+
+.library-filter-chip .select-trigger {
+  min-height: 40px;
+  border: 0;
   border-radius: 8px;
-  padding: 10px 36px 10px 14px;
-  background-color: transparent;
-  background-image:
-    linear-gradient(45deg, transparent 50%, rgba(236, 244, 255, 0.9) 50%),
-    linear-gradient(135deg, rgba(236, 244, 255, 0.9) 50%, transparent 50%);
-  background-position:
-    calc(100% - 14px) 52%,
-    calc(100% - 9px) 52%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-
-/* Estado disabled si algún día lo usas */
-.library-filter-chip select:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-/* Opciones internas
-   Nota: esto tiene soporte limitado según navegador/SO */
-.library-filter-chip select option {
-  background: #1d1e26;
+  background: transparent;
+  padding: 10px 34px 10px 14px;
   color: #f5f7fd;
+  box-shadow: none;
 }
+
+.library-filter-chip .select-trigger::before {
+  right: 28px;
+  background: rgba(236, 244, 255, 0.16);
+}
+
+.library-filter-chip .select-trigger::after {
+  right: 10px;
+  border-right-color: rgba(236, 244, 255, 0.9);
+  border-bottom-color: rgba(236, 244, 255, 0.9);
+}
+
+.library-filter-chip .select-trigger:hover,
+.library-filter-chip .select-trigger:focus-visible {
+  /* background: rgba(255, 255, 255, 0.03); */
+  box-shadow: none;
+}
+
+.library-filter-chip .select-menu {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1d1e26;
+}
+
 
 .library-chip-button,
 .library-status-chip {
@@ -1503,3 +1513,4 @@
     align-items: stretch;
   }
 }
+
