@@ -8,6 +8,8 @@ import {
   getMetadataForCatalogEntry,
   removeEntry,
   removeList,
+  resolveDetectionMetadata,
+  saveDetection,
   updateList,
   updateEntry,
 } from '../shared/client'
@@ -34,6 +36,7 @@ import {
   isCatalogMetadataSynced,
 } from '../shared/catalog-sync'
 import type {
+  DetectionResult,
   FuzzyDate,
   LibraryEntry,
   MetadataCard,
@@ -236,12 +239,47 @@ function getCatalogSyncState(
   return null
 }
 
-function SyncStatusGlyph({ synced, className }: { synced: boolean; className?: string }) {
-  if (synced) {
+type CatalogSyncVisualState = 'synced' | 'pending' | 'syncing'
+
+function SyncStatusGlyph({
+  state,
+  className,
+}: {
+  state: CatalogSyncVisualState
+  className?: string
+}) {
+  if (state === 'synced') {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
         <path
           d="m6.5 12.5 3.3 3.3 7.7-8.1"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    )
+  }
+
+  if (state === 'syncing') {
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className={`${className ?? ''} is-spinning`.trim()}
+      >
+        <path
+          d="M20 12a8 8 0 1 1-2.34-5.66"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <path
+          d="M20 4v4h-4"
           fill="none"
           stroke="currentColor"
           strokeLinecap="round"
@@ -447,6 +485,41 @@ type EntryDeleteState = {
   title: string
 }
 
+type CatalogSyncFailure = {
+  title: string
+  reason: string
+}
+
+type CatalogSyncSummary = {
+  total: number
+  resolvedTitles: string[]
+  failedItems: CatalogSyncFailure[]
+}
+
+function buildDetectionForCatalogSync(entry: LibraryEntry): DetectionResult {
+  const progress = getResolvedProgressState(entry.activity.currentProgress, entry.activity.status, {
+    episodeCount: entry.catalog.episodeCount,
+    chapterCount: entry.catalog.chapterCount,
+  })
+
+  return {
+    title: entry.catalog.title,
+    normalizedTitle: entry.catalog.normalizedTitle,
+    mediaType: entry.catalog.mediaType,
+    sourceSite: entry.activity.lastSource?.siteName ?? 'Library',
+    url: entry.activity.lastSource?.url ?? '',
+    favicon: entry.activity.lastSource?.favicon ?? '',
+    pageTitle: entry.activity.lastSource?.pageTitle ?? entry.catalog.title,
+    season: progress.season,
+    episode: progress.episode,
+    episodeTotal: progress.episodeTotal,
+    chapter: progress.chapter,
+    chapterTotal: progress.chapterTotal,
+    progressLabel: progress.progressText,
+    confidence: 1,
+  }
+}
+
 export function SidePanelApp() {
   const { locale, t } = useI18n()
   const [snapshot, setSnapshot] = useState<WatchLogSnapshot>(getInitialSnapshot)
@@ -467,6 +540,12 @@ export function SidePanelApp() {
   const [listNameDraft, setListNameDraft] = useState('')
   const [listModalState, setListModalState] = useState<ListModalState | null>(null)
   const [entryDeleteTarget, setEntryDeleteTarget] = useState<EntryDeleteState | null>(null)
+  const [syncingCatalogIds, setSyncingCatalogIds] = useState<string[]>([])
+  const [catalogSyncProgress, setCatalogSyncProgress] = useState<{
+    processed: number
+    total: number
+  } | null>(null)
+  const [catalogSyncSummary, setCatalogSyncSummary] = useState<CatalogSyncSummary | null>(null)
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({})
   const [statusMessageState, setStatusMessageState] = useState<{
     key:
@@ -650,6 +729,17 @@ export function SidePanelApp() {
   const sourceOptions = Array.from(
     new Set(entries.map((entry) => entry.activity.lastSource?.siteName ?? 'Unknown')),
   ).sort()
+  const pendingEntries = entries.filter((entry) => getCatalogSyncState(entry.catalog) === 'pending')
+  const syncingCatalogIdSet = new Set(syncingCatalogIds)
+  const isCatalogSyncRunning = catalogSyncProgress !== null
+  const catalogSyncButtonLabel = isCatalogSyncRunning
+    ? t('library.syncPendingRunning', {
+      current: catalogSyncProgress.processed,
+      total: catalogSyncProgress.total,
+    })
+    : pendingEntries.length > 0
+      ? t('library.syncPendingAction', { count: pendingEntries.length })
+      : t('library.syncPendingNone')
 
   useEffect(() => {
     let cancelled = false
@@ -1014,6 +1104,92 @@ export function SidePanelApp() {
     setStatusMessageState({ key: 'library.ready' })
   }
 
+  async function handleSyncPendingCatalog(): Promise<void> {
+    if (isCatalogSyncRunning || pendingEntries.length === 0) {
+      return
+    }
+
+    const queue = pendingEntries
+    const queueIds = queue.map((entry) => entry.catalog.id)
+    const resolvedTitles: string[] = []
+    const failedItems: CatalogSyncFailure[] = []
+
+    setCatalogSyncSummary(null)
+    setSyncingCatalogIds(queueIds)
+    setCatalogSyncProgress({
+      processed: 0,
+      total: queue.length,
+    })
+
+    try {
+      for (let index = 0; index < queue.length; index += 1) {
+        const entry = queue[index]
+        let failureReason: string | null = null
+
+        try {
+          if (!['anime', 'manga'].includes(entry.catalog.mediaType)) {
+            failureReason = t('library.syncReasonUnsupportedType', {
+              type: getLocalizedMediaTypeLabel(entry.catalog.mediaType, t),
+            })
+          } else {
+            const detection = buildDetectionForCatalogSync(entry)
+            const metadata = await resolveDetectionMetadata(detection)
+            if (!metadata) {
+              failureReason = t('library.syncReasonNoMatch')
+            } else if (metadata.mediaType !== entry.catalog.mediaType) {
+              failureReason = t('library.syncReasonTypeMismatch', {
+                expected: getLocalizedMediaTypeLabel(entry.catalog.mediaType, t),
+                received: getLocalizedMediaTypeLabel(metadata.mediaType, t),
+              })
+            } else {
+              const response = await saveDetection({
+                detection,
+                listId: entry.activity.status,
+                favorite: entry.activity.favorite,
+                metadata,
+                metadataSyncStatus: 'synced',
+                skipMetadataLookup: true,
+                disableTemporaryPoster: true,
+              })
+
+              setSnapshot(response.snapshot)
+              resolvedTitles.push(entry.catalog.title)
+            }
+          }
+        } catch (error) {
+          failureReason = t('library.syncReasonRequestFailed', {
+            reason: error instanceof Error ? error.message : 'sync-failed',
+          })
+        }
+
+        if (failureReason) {
+          failedItems.push({
+            title: entry.catalog.title,
+            reason: failureReason,
+          })
+        }
+
+        setSyncingCatalogIds((current) => current.filter((catalogId) => catalogId !== entry.catalog.id))
+        setCatalogSyncProgress({
+          processed: index + 1,
+          total: queue.length,
+        })
+
+        if (index < queue.length - 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 3000))
+        }
+      }
+    } finally {
+      setSyncingCatalogIds([])
+      setCatalogSyncProgress(null)
+      setCatalogSyncSummary({
+        total: queue.length,
+        resolvedTitles,
+        failedItems,
+      })
+    }
+  }
+
   const statusMessage = t(statusMessageState.key, statusMessageState.params)
   const showTopbarError = statusMessageState.key === 'library.errorWithReason'
 
@@ -1209,6 +1385,16 @@ export function SidePanelApp() {
                   </select>
                 </label>
               ) : null}
+              {selectedViewId !== EXPLORER_TAB_ID ? (
+                <button
+                  className="button secondary library-sync-button"
+                  type="button"
+                  disabled={isCatalogSyncRunning || pendingEntries.length === 0}
+                  onClick={() => void handleSyncPendingCatalog()}
+                >
+                  {catalogSyncButtonLabel}
+                </button>
+              ) : null}
               <span className="library-status-chip">
                 {selectedViewId === EXPLORER_TAB_ID
                   ? t(
@@ -1323,9 +1509,12 @@ export function SidePanelApp() {
                   const progress = getProgressPercent(entry)
                   const platform = entry.activity.lastSource?.siteName ?? t('library.manualEntry')
                   const seasonBadge = getLibraryCardSeasonBadge(entry)
-                  const syncState = getCatalogSyncState(entry.catalog)
+                  const baseSyncState = getCatalogSyncState(entry.catalog)
+                  const syncState: CatalogSyncVisualState | null = syncingCatalogIdSet.has(entry.catalog.id)
+                    ? 'syncing'
+                    : baseSyncState
                   const showPendingPlaceholder =
-                    syncState === 'pending' && !entry.catalog.poster
+                    (baseSyncState === 'pending' || syncState === 'syncing') && !entry.catalog.poster
 
                   return (
                     <article
@@ -1359,7 +1548,7 @@ export function SidePanelApp() {
                               <span className={`catalog-sync-badge is-${syncState}`}>
                                 <SyncStatusGlyph
                                   className="catalog-sync-icon"
-                                  synced={syncState === 'synced'}
+                                  state={syncState}
                                 />
                               </span>
                             ) : null}
@@ -2063,6 +2252,80 @@ export function SidePanelApp() {
               </button>
               <button className="button danger" type="button" onClick={() => void handleConfirmDeleteEntry()}>
                 {t('library.confirmDeleteItem')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {catalogSyncSummary ? (
+        <div className="library-modal-backdrop" role="presentation">
+          <div className="library-modal panel library-sync-summary-modal" role="dialog" aria-modal="true">
+            <div className="list-settings-header">
+              <div>
+                <p className="library-detail-kicker">{t('library.syncSummaryKicker')}</p>
+                <h3 className="list-settings-title">{t('library.syncSummaryTitle')}</h3>
+              </div>
+              <button
+                className="list-settings-close"
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setCatalogSyncSummary(null)}
+              >
+                <CloseIcon className="list-settings-close-icon" />
+              </button>
+            </div>
+
+            <p className="library-detail-copy">
+              {t('library.syncSummaryBody', {
+                total: catalogSyncSummary.total,
+                resolved: catalogSyncSummary.resolvedTitles.length,
+                failed: catalogSyncSummary.failedItems.length,
+              })}
+            </p>
+
+            {catalogSyncSummary.resolvedTitles.length > 0 ? (
+              <div className="library-sync-summary-section">
+                <p className="library-sync-summary-heading">
+                  {t('library.syncSummaryResolved', {
+                    count: catalogSyncSummary.resolvedTitles.length,
+                  })}
+                </p>
+                <div className="library-sync-summary-list">
+                  {catalogSyncSummary.resolvedTitles.map((title) => (
+                    <div key={title} className="library-sync-summary-item">
+                      <strong>{title}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {catalogSyncSummary.failedItems.length > 0 ? (
+              <div className="library-sync-summary-section">
+                <p className="library-sync-summary-heading">
+                  {t('library.syncSummaryFailed', {
+                    count: catalogSyncSummary.failedItems.length,
+                  })}
+                </p>
+                <div className="library-sync-summary-list">
+                  {catalogSyncSummary.failedItems.map((item) => (
+                    <div key={`${item.title}:${item.reason}`} className="library-sync-summary-item">
+                      <strong>{item.title}</strong>
+                      <span>{item.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="library-modal-actions">
+              <button
+                className="button"
+                type="button"
+                onClick={() => setCatalogSyncSummary(null)}
+              >
+                {t('common.close')}
               </button>
             </div>
           </div>

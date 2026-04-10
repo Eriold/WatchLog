@@ -22,6 +22,7 @@ import { storageGet } from '../shared/storage/browser'
 import type {
   DetectionResult,
   LibraryEntry,
+  MediaType,
   MetadataCard,
   WatchListDefinition,
   WatchLogSnapshot,
@@ -311,11 +312,12 @@ function findExistingListByLabel(
 function buildCatalogImportDetection(
   item: ZonaTmoCatalogImportItem,
   sourceSite: string,
+  listMediaType?: MediaType,
 ): DetectionResult {
   return {
     title: item.title,
     normalizedTitle: item.normalizedTitle,
-    mediaType: item.mediaType,
+    mediaType: listMediaType ?? item.mediaType,
     sourceSite,
     url: item.sourceUrl,
     favicon: `https://${sourceSite}/favicon.ico`,
@@ -327,6 +329,36 @@ function buildCatalogImportDetection(
 
 async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function inferCatalogListMediaType(items: ZonaTmoCatalogImportItem[]): MediaType | undefined {
+  const counts = new Map<MediaType, number>()
+
+  for (const item of items) {
+    if (item.mediaType === 'unknown') {
+      continue
+    }
+
+    counts.set(item.mediaType, (counts.get(item.mediaType) ?? 0) + 1)
+  }
+
+  if (counts.size === 0) {
+    return undefined
+  }
+
+  if (counts.size === 1) {
+    return counts.keys().next().value
+  }
+
+  const ranked = Array.from(counts.entries()).sort((left, right) => right[1] - left[1])
+  const [winner, winnerCount] = ranked[0]
+  const [, runnerUpCount] = ranked[1]
+
+  if (winnerCount === runnerUpCount) {
+    return undefined
+  }
+
+  return winner
 }
 
 function inferProgressPercent(
@@ -1367,6 +1399,7 @@ export function PopupApp() {
     }
 
     const total = catalogImportSnapshot.items.length
+    const listMediaType = inferCatalogListMediaType(catalogImportSnapshot.items)
     setCatalogImportBusy(true)
     setCatalogImportCompletedTarget(null)
     setCatalogImportProgress({
@@ -1389,7 +1422,11 @@ export function PopupApp() {
         })
 
         const response = await saveDetection({
-          detection: buildCatalogImportDetection(item, catalogImportSnapshot.sourceSite),
+          detection: buildCatalogImportDetection(
+            item,
+            catalogImportSnapshot.sourceSite,
+            listMediaType,
+          ),
           listId: destination.listId,
           metadataSyncStatus: 'pending',
           skipMetadataLookup: true,
@@ -1413,7 +1450,11 @@ export function PopupApp() {
 
       for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
         const item = catalogImportSnapshot.items[index]
-        const detection = buildCatalogImportDetection(item, catalogImportSnapshot.sourceSite)
+        const detection = buildCatalogImportDetection(
+          item,
+          catalogImportSnapshot.sourceSite,
+          listMediaType,
+        )
 
         setCatalogImportProgress({
           stage: 'syncing',

@@ -451,6 +451,14 @@
   color: #f5ecff;
 }
 
+.library-sync-button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -708,9 +716,27 @@
   color: #ff7d7d;
 }
 
+.catalog-sync-badge.is-syncing {
+  color: #7ecbff;
+}
+
 .catalog-sync-icon {
   width: 14px;
   height: 14px;
+}
+
+.catalog-sync-icon.is-spinning {
+  animation: catalog-sync-spin 0.9s linear infinite;
+}
+
+@keyframes catalog-sync-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .library-card-progress {
@@ -1278,6 +1304,55 @@
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+}
+
+.library-sync-summary-modal {
+  width: min(560px, 100%);
+}
+
+.library-sync-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.library-sync-summary-heading {
+  margin: 0;
+  color: #dbe7ff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.library-sync-summary-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.library-sync-summary-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.library-sync-summary-item strong {
+  color: #f4f8ff;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.library-sync-summary-item span {
+  color: #9fb2d9;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .button.danger {
