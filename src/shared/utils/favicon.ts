@@ -47,7 +47,12 @@ function normalizeFaviconHref(rawHref: string, pageUrl: URL): string | null {
   }
 
   try {
-    return new URL(trimmed, pageUrl).toString()
+    const parsed = new URL(trimmed, pageUrl)
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'https:'
+    }
+
+    return parsed.toString()
   } catch {
     return null
   }
@@ -145,10 +150,18 @@ function isUsableFaviconUrl(url: string): boolean {
 
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    return parsed.protocol === 'https:'
   } catch {
     return false
   }
+}
+
+function getExtensionFallbackIcon(): string | null {
+  if (typeof chrome === 'undefined' || typeof chrome.runtime === 'undefined') {
+    return null
+  }
+
+  return chrome.runtime.getURL('icons/favicon-16x16.png')
 }
 
 export function getDocumentFaviconCandidates(document: Document): FaviconCandidate[] {
@@ -225,5 +238,6 @@ export function getFavicon(url: URL, options: GetFaviconOptions = {}): string {
     return candidateUrl
   }
 
-  return `${url.origin}/favicon.ico`
+  const fallback = normalizeFaviconHref(`${url.origin}/favicon.ico`, url)
+  return fallback ?? getExtensionFallbackIcon() ?? `${url.origin.replace(/^http:/i, 'https:')}/favicon.ico`
 }

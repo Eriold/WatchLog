@@ -19,6 +19,8 @@ WatchLog is a Manifest V3 browser extension for tracking what the user is watchi
 ```bash
 pnpm install
 pnpm build
+pnpm build chrome
+pnpm build firefox
 pnpm test
 pnpm dev
 pnpm deps:policy
@@ -36,6 +38,8 @@ pnpm deps:policy
 3. Enable developer mode.
 4. Load the `dist/` folder as an unpacked extension.
 
+For Firefox, run `pnpm build firefox` and load the generated `dist-firefox/` folder in Firefox's add-on debug workflow.
+
 ## Project notes
 - Explorer currently runs on mock metadata behind a provider abstraction.
 - Google Drive sync is intentionally deferred, but a provider stub already exists.
@@ -47,4 +51,3 @@ pnpm deps:policy
 - If you reuse this code or a derivative, keep the original copyright notices and preserve attribution.
 - If you distribute a derivative, retain the `NOTICE` file and any required attribution text.
 - In plain terms: you can fork, modify, and even use it commercially, but you must keep the credit trail intact.
-
