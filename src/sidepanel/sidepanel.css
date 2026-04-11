@@ -133,14 +133,16 @@
   /* color: #f5f2ff; */
   border: none;
   border-right: 2px solid #662a7f;
-  color: #9f56bd;
+  color: #d371fb;
+  /* color: #9f56bd; */
 }
 
 .library-nav-button:hover,
 .library-settings-button:hover,
 .library-nav-button.is-active span{
   background: rgb(41, 19, 61);
-  color: #9f56bd !important;
+  color: #d371fb !important;
+  /* color: #9f56bd !important; */
 }
 
 .content-elements {

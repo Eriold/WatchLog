@@ -39,6 +39,7 @@ type EntryDetailDrawerProps = {
   selectedEntryProgressSelectValue: string
   selectedEntryDetails: DetailEntryMetadata | null
   isEntryAniListRefreshing: boolean
+  selectedExplorerSaveListId: string
   onUpdateDraft: (patch: Partial<EntryDraft>) => void
   onToggleFavorite: () => void
   onSaveEntry: () => void
@@ -47,7 +48,8 @@ type EntryDetailDrawerProps = {
   onCloseSelectedExplorer: () => void
   onDeleteEntry: () => void
   onOpenExistingExplorerEntry: (entry: LibraryEntry) => void
-  onExplorerAdd: (item: MetadataCard) => void
+  onExplorerSaveListChange: (listId: string) => void
+  onExplorerSave: (item: MetadataCard, listId: string) => void
 }
 
 const EDITABLE_MEDIA_TYPES: LibraryEntry['catalog']['mediaType'][] = [
@@ -117,6 +119,7 @@ export function EntryDetailDrawer({
   selectedEntryProgressSelectValue,
   selectedEntryDetails,
   isEntryAniListRefreshing,
+  selectedExplorerSaveListId,
   onUpdateDraft,
   onToggleFavorite,
   onSaveEntry,
@@ -125,9 +128,14 @@ export function EntryDetailDrawer({
   onCloseSelectedExplorer,
   onDeleteEntry,
   onOpenExistingExplorerEntry,
-  onExplorerAdd,
+  onExplorerSaveListChange,
+  onExplorerSave,
 }: EntryDetailDrawerProps) {
   const active = Boolean(selectedEntry || selectedExplorerItem)
+  const selectedExplorerSavedListId = selectedExplorerMatch?.activity.status ?? null
+  const selectedExplorerIsSavedInSelectedList =
+    selectedExplorerSavedListId !== null &&
+    selectedExplorerSavedListId === selectedExplorerSaveListId
 
   return (
     <aside className={`entry-detail-drawer ${active ? 'is-open' : ''}`}>
@@ -509,29 +517,41 @@ export function EntryDetailDrawer({
               />
             </div>
 
+            <div className="field-card">
+              <label className="label">{t('library.primaryList')}</label>
+              <CustomSelect
+                value={selectedExplorerSaveListId}
+                onChange={onExplorerSaveListChange}
+                options={snapshot.lists.map((list) => ({
+                  value: list.id,
+                  label: getLocalizedListDefinitionLabel(list, t),
+                }))}
+              />
+            </div>
+
             <div className="entry-detail-actions-stack">
-              {selectedExplorerMatch ? (
-                <p
-                  className="explorer-existing-link explorer-existing-link-detail"
-                  onClick={() => onOpenExistingExplorerEntry(selectedExplorerMatch)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      onOpenExistingExplorerEntry(selectedExplorerMatch)
-                    }
-                  }}
-                  role="link"
-                  tabIndex={0}
-                >
-                  {t('library.addedInList', {
-                    label: getLocalizedListLabel(snapshot.lists, selectedExplorerMatch.activity.status, t),
-                  })}
-                </p>
-              ) : (
-                <button className="button" type="button" onClick={() => void onExplorerAdd(selectedExplorerItem)}>
-                  {t('library.addToLibrary')}
-                </button>
-              )}
+              <button
+                className={`button ${selectedExplorerIsSavedInSelectedList ? 'secondary' : ''}`.trim()}
+                type="button"
+                onClick={() => {
+                  if (selectedExplorerIsSavedInSelectedList && selectedExplorerMatch) {
+                    onOpenExistingExplorerEntry(selectedExplorerMatch)
+                    return
+                  }
+
+                  onExplorerSave(selectedExplorerItem, selectedExplorerSaveListId)
+                }}
+              >
+                {selectedExplorerIsSavedInSelectedList && selectedExplorerMatch
+                  ? t('library.savedInList', {
+                      label: getLocalizedListLabel(
+                        snapshot.lists,
+                        selectedExplorerMatch.activity.status,
+                        t,
+                      ),
+                    })
+                  : t('common.save')}
+              </button>
             </div>
 
             <div className="field-card entry-technical-block">

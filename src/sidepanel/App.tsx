@@ -146,6 +146,10 @@ function getEntryDisplayProgressText(
   return getLocalizedProgressLabel(getEntryDisplayProgress(entry), t)
 }
 
+function getDefaultExplorerSaveListId(snapshot: WatchLogSnapshot): string {
+  return snapshot.lists.find((list) => list.id === 'library')?.id ?? snapshot.lists[0]?.id ?? 'library'
+}
+
 function createEntryDraft(entry: LibraryEntry): EntryDraft {
   const progress = getEntryDisplayProgress(entry)
   const control = getStructuredProgressControl(progress)
@@ -498,6 +502,7 @@ export function SidePanelApp() {
     () => getInitialLibrarySelection().catalogId,
   )
   const [selectedExplorerId, setSelectedExplorerId] = useState<string | null>(null)
+  const [selectedExplorerSaveListId, setSelectedExplorerSaveListId] = useState('')
   const [libraryQuery, setLibraryQuery] = useState(() => getInitialLibrarySelection().query)
   const [typeFilter, setTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -531,7 +536,7 @@ export function SidePanelApp() {
     | 'library.entryUpdated'
     | 'library.entryDeleted'
     | 'library.explorerRefreshed'
-    | 'library.addedToLibrary'
+    | 'library.addedToList'
     | 'library.anilistRefreshRunning'
     | 'library.anilistRefreshDone'
     | 'library.anilistRefreshNoMatch'
@@ -675,6 +680,10 @@ export function SidePanelApp() {
   )
   const selectedExplorerMatch =
     selectedExplorerItem === null ? null : explorerMatchedEntries.get(selectedExplorerItem.id) ?? null
+  const selectedExplorerSavedListId = selectedExplorerMatch?.activity.status ?? null
+  const selectedExplorerIsSavedInSelectedList =
+    selectedExplorerSavedListId !== null &&
+    selectedExplorerSavedListId === selectedExplorerSaveListId
 
   const selectedDraft = selectedEntry
     ? drafts[selectedEntry.catalog.id] ?? createEntryDraft(selectedEntry)
@@ -958,6 +967,9 @@ export function SidePanelApp() {
     setActiveListSettingsId(null)
     setSelectedCatalogId(null)
     setSelectedExplorerId(itemId)
+    setSelectedExplorerSaveListId(
+      explorerMatchedEntries.get(itemId)?.activity.status ?? getDefaultExplorerSaveListId(snapshot),
+    )
   }
 
   function handleSelectView(viewId: string): void {
@@ -1140,21 +1152,22 @@ export function SidePanelApp() {
     }
   }
 
-  async function handleExplorerAdd(item: MetadataCard): Promise<void> {
-    const response = await addFromExplorer(item.id, 'library')
+  async function handleExplorerAdd(item: MetadataCard, listId: string): Promise<void> {
+    const response = await addFromExplorer(item.id, listId)
     setSnapshot(response.snapshot)
-    setSelectedExplorerId(null)
-    setSelectedViewId('library')
-    setSelectedCatalogId(response.entry.catalog.id)
     setStatusMessageState({
-      key: 'library.addedToLibrary',
-      params: { title: item.title },
+      key: 'library.addedToList',
+      params: {
+        title: item.title,
+        label: getLocalizedListLabel(response.snapshot.lists, listId, t),
+      },
     })
   }
 
   function handleOpenExistingExplorerEntry(entry: LibraryEntry): void {
     setSelectedViewId(entry.activity.status)
     setSelectedExplorerId(null)
+    setSelectedExplorerSaveListId(entry.activity.status)
     setSelectedCatalogId(entry.catalog.id)
     setStatusMessageState({ key: 'library.ready' })
   }
@@ -1543,18 +1556,48 @@ export function SidePanelApp() {
                           }}
                           role="link"
                           tabIndex={0}
-                        >
+                          >
                           {t('library.addedInList', {
                             label: getLocalizedListLabel(snapshot.lists, existingEntry.activity.status, t),
                           })}
                         </p>
+                      ) : selectedExplorerItem?.id === item.id &&
+                        selectedExplorerIsSavedInSelectedList &&
+                        selectedExplorerMatch ? (
+                        <button
+                          className="button secondary"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleOpenExistingExplorerEntry(selectedExplorerMatch)
+                          }}
+                        >
+                          {t('library.savedInList', {
+                            label: getLocalizedListLabel(
+                              snapshot.lists,
+                              selectedExplorerMatch.activity.status,
+                              t,
+                            ),
+                          })}
+                        </button>
+                      ) : selectedExplorerItem?.id === item.id ? (
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void handleExplorerAdd(item, selectedExplorerSaveListId)
+                          }}
+                        >
+                          {t('common.save')}
+                        </button>
                       ) : (
                         <button
                           className="button"
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
-                            void handleExplorerAdd(item)
+                            void handleExplorerAdd(item, getDefaultExplorerSaveListId(snapshot))
                           }}
                         >
                           {t('library.addToLibrary')}
@@ -1680,6 +1723,7 @@ export function SidePanelApp() {
         selectedEntryProgressSelectValue={selectedEntryProgressSelectValue}
         selectedEntryDetails={selectedEntryDetails}
         isEntryAniListRefreshing={isEntryAniListRefreshing}
+        selectedExplorerSaveListId={selectedExplorerSaveListId}
         onUpdateDraft={updateDraft}
         onToggleFavorite={handleToggleFavorite}
         onSaveEntry={handleSaveEntry}
@@ -1688,7 +1732,8 @@ export function SidePanelApp() {
         onCloseSelectedExplorer={() => setSelectedExplorerId(null)}
         onDeleteEntry={handleRequestDeleteEntry}
         onOpenExistingExplorerEntry={handleOpenExistingExplorerEntry}
-        onExplorerAdd={(item) => void handleExplorerAdd(item)}
+        onExplorerSaveListChange={setSelectedExplorerSaveListId}
+        onExplorerSave={(item, listId) => void handleExplorerAdd(item, listId)}
       />
 
       <div
