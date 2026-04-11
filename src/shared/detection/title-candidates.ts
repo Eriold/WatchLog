@@ -42,6 +42,7 @@ function getUrlSlugTitle(url: string): string | null {
 export function getDetectionTitleCandidates(
   detection: Pick<DetectionResult, 'sourceSite' | 'title' | 'pageTitle' | 'url'>,
   metadata?: Pick<MetadataCard, 'title' | 'aliases'> | null,
+  extraTitles: string[] = [],
 ): string[] {
   return uniqueTitles([
     metadata?.title,
@@ -49,13 +50,15 @@ export function getDetectionTitleCandidates(
     resolveDetectedTitle(detection.sourceSite, [detection.pageTitle]),
     getUrlSlugTitle(detection.url),
     ...(metadata?.aliases ?? []),
+    ...extraTitles,
   ])
 }
 
 export function getDetectionSearchQueries(
   detection: Pick<DetectionResult, 'sourceSite' | 'title' | 'normalizedTitle' | 'pageTitle' | 'url'>,
+  extraTitles: string[] = [],
 ): string[] {
-  const candidates = getDetectionTitleCandidates(detection)
+  const candidates = getDetectionTitleCandidates(detection, null, extraTitles)
   const normalizedCandidates = candidates.map((candidate) => normalizeTitle(candidate))
 
   return uniqueTitles([

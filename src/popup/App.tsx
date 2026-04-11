@@ -38,7 +38,7 @@ import {
   hydrateDetectionWithStoredProgress,
 } from '../shared/metadata/detection-hydration'
 import { buildLibraryUrl } from '../shared/navigation'
-import { getResolvedProgressState } from '../shared/progress'
+import { getResolvedProgressState, isDetectionAlreadyTracked } from '../shared/progress'
 import {
   isCatalogMetadataPending,
   isCatalogMetadataSynced,
@@ -57,6 +57,7 @@ import {
   getSortedLocalizedLists,
 } from '../shared/i18n/helpers'
 import { getDetectionTitleCandidates } from '../shared/detection/title-candidates'
+import { getSiteTitleAliasCandidates } from '../shared/detection/site-title-aliases'
 import { useI18n } from '../shared/i18n/useI18n'
 import { CustomSelect } from '../shared/ui/CustomSelect'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
@@ -281,6 +282,7 @@ function getPopupTitleSuggestions(
   detection: DetectionResult | null,
   metadata: MetadataCard | null,
   matchedEntry: LibraryEntry | null,
+  siteAliases: string[],
 ): string[] {
   if (!detection) {
     return []
@@ -289,6 +291,7 @@ function getPopupTitleSuggestions(
   return getDetectionTitleCandidates(
     detection,
     metadata ?? matchedEntry?.catalog ?? null,
+    siteAliases,
   )
 }
 
@@ -890,6 +893,7 @@ export function PopupApp() {
     listId: string
     label: string
   } | null>(null)
+  const [siteTitleAliases, setSiteTitleAliases] = useState<string[]>([])
 
   useEffect(() => {
     document.title = t('titles.popup')
@@ -1160,6 +1164,33 @@ export function PopupApp() {
   useEffect(() => {
     let cancelled = false
 
+    if (!detection) {
+      setSiteTitleAliases([])
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void getSiteTitleAliasCandidates(detection.sourceSite, detection.title)
+      .then((aliases) => {
+        if (!cancelled) {
+          setSiteTitleAliases(aliases)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSiteTitleAliases([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [detection?.sourceSite, detection?.title, detection?.normalizedTitle])
+
+  useEffect(() => {
+    let cancelled = false
+
     if (!detection || targetTabId === null) {
       setPosterCandidates([])
       setSelectedPosterUrl(null)
@@ -1193,6 +1224,21 @@ export function PopupApp() {
     ? findMatchingLibraryEntryForMetadata(snapshot, resolvedMetadata)
     : null
   const matchedLibraryEntry = matchedLibraryEntryFromMetadata ?? matchedLibraryEntryFromDetection
+  const matchedLibraryEntryAlreadyTracked = matchedLibraryEntry
+    ? isDetectionAlreadyTracked(
+        matchedLibraryEntry.activity.currentProgress,
+        matchedLibraryEntry.activity.status,
+        detection ?? {
+          season: undefined,
+          episode: undefined,
+          chapter: undefined,
+        },
+        {
+          episodeCount: matchedLibraryEntry.catalog.episodeCount,
+          chapterCount: matchedLibraryEntry.catalog.chapterCount,
+        },
+      )
+    : false
   const shouldResolveMetadata = shouldResolveMetadataForPopup(
     detection,
     matchedLibraryEntryFromDetection,
@@ -1201,6 +1247,7 @@ export function PopupApp() {
     detection,
     resolvedMetadata,
     matchedLibraryEntry,
+    siteTitleAliases,
   )
 
   useEffect(() => {
@@ -1282,7 +1329,7 @@ export function PopupApp() {
       return
     }
 
-    setSaveState('idle')
+    setSaveState(matchedLibraryEntryAlreadyTracked ? 'saved' : 'idle')
 
     if (matchedLibraryEntry) {
       setSelectedList(matchedLibraryEntry.activity.status)
@@ -1337,6 +1384,7 @@ export function PopupApp() {
     detection,
     libraryHydrated,
     matchedLibraryEntry,
+    matchedLibraryEntryAlreadyTracked,
     syncedDetectionSignature,
     targetTabId,
   ])

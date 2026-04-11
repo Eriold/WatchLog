@@ -1,6 +1,7 @@
 import { hydrateDetectionWithMetadata } from '../../../shared/metadata/detection-hydration'
 import type { MetadataProvider } from '../../../shared/metadata/provider'
 import { findMatchingLibraryEntry } from '../../../shared/selectors'
+import { rememberSiteTitleAliases } from '../../../shared/detection/site-title-aliases'
 import type { StorageProvider } from '../../../shared/storage/provider'
 import type {
   CatalogEntry,
@@ -92,6 +93,11 @@ export class WatchLogLibraryService {
     }
 
     await this.storageProvider.saveSnapshot(nextSnapshot)
+    await rememberSiteTitleAliases({
+      siteKey: hydratedDetection.sourceSite,
+      canonicalTitle: catalog.title,
+      aliases: catalog.aliases ?? [],
+    })
 
     return {
       entry: { catalog, activity: updatedActivity },

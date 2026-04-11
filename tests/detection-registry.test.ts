@@ -338,6 +338,42 @@ describe('detectCurrentDocument', () => {
     expect(result?.mediaType).toBe('anime')
   })
 
+  it('extracts Mangadex titles and chapter progress from the reader header', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <title>Chapter 62 - Honzuki no Gekokujou</title>
+          <meta property="og:title" content="Chapter 62 - Honzuki no Gekokujou" />
+        </head>
+        <body>
+          <main>
+            <a
+              class="reader--header-manga"
+              href="/title/f1311d54-99bc-49ed-b12f-099b9a40c104/honzuki-no-gekokujou-shisho-ni-naru-tame-ni-wa-shudan-o-erandeiraremasen-dai-2-bu-hon-no-tamenara"
+            >
+              Honzuki no Gekokujou: Shisho ni Naru tame ni wa Shudan o Erandeiraremasen—Dai-2 Bu: Hon no Tamenara Miko ni Naru!
+            </a>
+            <div>
+              <span>Chapter 62</span>
+            </div>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(parseFixture(fixture), 'https://mangadex.org/chapter/example')
+
+    expect(result?.sourceSite).toBe('mangadex.org')
+    expect(result?.title).toBe(
+      'Honzuki no Gekokujou: Shisho ni Naru tame ni wa Shudan o Erandeiraremasen—Dai-2 Bu: Hon no Tamenara Miko ni Naru!',
+    )
+    expect(result?.normalizedTitle).toContain('honzuki no gekokujou')
+    expect(result?.chapter).toBe(62)
+    expect(result?.progressLabel).toBe('Cap 62')
+    expect(result?.mediaType).toBe('manga')
+  })
+
   it('prefers the JKanime path slug when the page title is polluted by episode text', () => {
     const fixture = `
       <!doctype html>

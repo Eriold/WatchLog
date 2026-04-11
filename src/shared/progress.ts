@@ -1,4 +1,4 @@
-import type { CatalogEntry, ProgressState } from './types'
+import type { CatalogEntry, DetectionResult, ProgressState } from './types'
 
 interface ProgressCatalogCounts {
   episodeCount?: CatalogEntry['episodeCount']
@@ -165,4 +165,31 @@ export function getProgressTotalValue(progress: ProgressState): string {
   }
 
   return '--'
+}
+
+export function isDetectionAlreadyTracked(
+  progress: ProgressState,
+  status: string,
+  detection: Pick<DetectionResult, 'season' | 'episode' | 'chapter'>,
+  counts?: ProgressCatalogCounts,
+): boolean {
+  const resolved = getResolvedProgressState(progress, status, counts)
+
+  if (detection.episode !== undefined && resolved.episode !== undefined) {
+    if (
+      detection.season !== undefined &&
+      resolved.season !== undefined &&
+      detection.season !== resolved.season
+    ) {
+      return false
+    }
+
+    return resolved.episode >= detection.episode
+  }
+
+  if (detection.chapter !== undefined && resolved.chapter !== undefined) {
+    return resolved.chapter >= detection.chapter
+  }
+
+  return false
 }

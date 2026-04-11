@@ -3,6 +3,7 @@ import {
   buildProgressStateFromControl,
   getResolvedProgressState,
   getStructuredProgressControl,
+  isDetectionAlreadyTracked,
 } from '../src/shared/progress'
 
 describe('getResolvedProgressState', () => {
@@ -97,5 +98,49 @@ describe('getResolvedProgressState', () => {
       chapterTotal: undefined,
       progressText: '10/10',
     })
+  })
+
+  it('treats a detected episode as already tracked when the stored progress is ahead', () => {
+    expect(
+      isDetectionAlreadyTracked(
+        {
+          season: 1,
+          episode: 5,
+          episodeTotal: 12,
+          progressText: '5/12',
+        },
+        'watching',
+        {
+          season: 1,
+          episode: 4,
+          chapter: undefined,
+        },
+        {
+          episodeCount: 12,
+        },
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps a later detected episode pending until it is actually saved', () => {
+    expect(
+      isDetectionAlreadyTracked(
+        {
+          season: 1,
+          episode: 5,
+          episodeTotal: 12,
+          progressText: '5/12',
+        },
+        'watching',
+        {
+          season: 1,
+          episode: 6,
+          chapter: undefined,
+        },
+        {
+          episodeCount: 12,
+        },
+      ),
+    ).toBe(false)
   })
 })
