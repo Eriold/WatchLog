@@ -1,5 +1,11 @@
 import type { DetectionResult, MetadataCard, ProgressState } from '../types'
 
+const PRESERVE_DETECTED_TITLE_SITES = new Set(['mangadex.org'])
+
+export function shouldPreserveDetectedTitle(sourceSite: string): boolean {
+  return PRESERVE_DETECTED_TITLE_SITES.has(sourceSite)
+}
+
 function resolveEpisodeTotal(
   detection: DetectionResult,
   metadata?: MetadataCard,

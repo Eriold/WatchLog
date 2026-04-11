@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   hydrateDetectionWithMetadata,
   hydrateDetectionWithStoredProgress,
+  shouldPreserveDetectedTitle,
 } from '../src/shared/metadata/detection-hydration'
 import type { DetectionResult, ProgressState } from '../src/shared/types'
 
@@ -65,5 +66,10 @@ describe('detection hydration', () => {
     expect(hydrated.episode).toBe(10)
     expect(hydrated.episodeTotal).toBe(13)
     expect(hydrated.progressLabel).toBe('Ep 10/13')
+  })
+
+  it('preserves the detected title for MangaDex when AniList metadata has a different title', () => {
+    expect(shouldPreserveDetectedTitle('mangadex.org')).toBe(true)
+    expect(shouldPreserveDetectedTitle('jkanime.net')).toBe(false)
   })
 })

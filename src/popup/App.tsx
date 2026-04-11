@@ -36,6 +36,7 @@ import {
 import {
   hydrateDetectionWithMetadata,
   hydrateDetectionWithStoredProgress,
+  shouldPreserveDetectedTitle,
 } from '../shared/metadata/detection-hydration'
 import { buildLibraryUrl } from '../shared/navigation'
 import { getResolvedProgressState, isDetectionAlreadyTracked } from '../shared/progress'
@@ -1278,7 +1279,8 @@ export function PopupApp() {
           }
 
           const hydrated = hydrateDetectionWithMetadata(current, metadata)
-          const nextDetection = matchedLibraryEntryFromDetection
+          const nextDetection =
+            matchedLibraryEntryFromDetection || shouldPreserveDetectedTitle(current.sourceSite)
             ? hydrated
             : {
                 ...hydrated,
@@ -1335,13 +1337,16 @@ export function PopupApp() {
       setSelectedList(matchedLibraryEntry.activity.status)
       setFavorite(matchedLibraryEntry.activity.favorite)
 
+      const shouldPreserveSourceTitle = shouldPreserveDetectedTitle(detection.sourceSite)
       const hydratedDetection = hydrateDetectionWithStoredProgress(
-        {
-          ...detection,
-          title: matchedLibraryEntry.catalog.title,
-          normalizedTitle: matchedLibraryEntry.catalog.normalizedTitle,
-          mediaType: matchedLibraryEntry.catalog.mediaType,
-        },
+        shouldPreserveSourceTitle
+          ? detection
+          : {
+              ...detection,
+              title: matchedLibraryEntry.catalog.title,
+              normalizedTitle: matchedLibraryEntry.catalog.normalizedTitle,
+              mediaType: matchedLibraryEntry.catalog.mediaType,
+            },
         getResolvedProgressState(
           matchedLibraryEntry.activity.currentProgress,
           matchedLibraryEntry.activity.status,
