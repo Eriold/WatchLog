@@ -130,7 +130,17 @@
 .library-settings-button:hover,
 .library-nav-button.is-active {
   background: rgb(41, 19, 61);
-  color: #f5f2ff;
+  /* color: #f5f2ff; */
+  border: none;
+  border-right: 2px solid #662a7f;
+  color: #9f56bd;
+}
+
+.library-nav-button:hover,
+.library-settings-button:hover,
+.library-nav-button.is-active span{
+  background: rgb(41, 19, 61);
+  color: #9f56bd !important;
 }
 
 .content-elements {
