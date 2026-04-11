@@ -65,6 +65,7 @@ export const esLibraryTranslations = {
   'library.savedInList': 'Guardado en {label}',
   'library.explorerRefreshed': 'Explorer actualizado.',
   'library.addedToList': '{title} agregado a {label}.',
+  'library.sidebarAttribution': 'Base original por eriold. Conserva la atribución en forks.',
   'library.noTitlesMatched': 'No hay títulos que coincidan con esta vista.',
   'library.noTitlesHint':
     'Guarda algo desde el popup, cambia los filtros o agrega una card mock desde Explorer.',

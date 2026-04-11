@@ -41,3 +41,10 @@ pnpm deps:policy
 - Google Drive sync is intentionally deferred, but a provider stub already exists.
 - `/prototype_ui` is reserved for the future visual source of truth.
 - `/_agent` contains project memory and implementation notes.
+
+## License
+- This project is licensed under the [Apache License, Version 2.0](./LICENSE).
+- If you reuse this code or a derivative, keep the original copyright notices and preserve attribution.
+- If you distribute a derivative, retain the `NOTICE` file and any required attribution text.
+- In plain terms: you can fork, modify, and even use it commercially, but you must keep the credit trail intact.
+

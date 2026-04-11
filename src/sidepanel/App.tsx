@@ -1363,6 +1363,7 @@ export function SidePanelApp() {
             <SettingsIcon className="library-settings-icon" />
             <span>{t('common.settings')}</span>
           </button>
+          <p className="library-settings-attribution tiny">{t('library.sidebarAttribution')}</p>
         </div>
       </aside>
 

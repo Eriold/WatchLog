@@ -339,6 +339,14 @@
   letter-spacing: 0.02em;
 }
 
+.library-settings-attribution {
+  margin: -8px 16px 0;
+  padding: 0 4px;
+  line-height: 1.35;
+  color: rgba(151, 167, 191, 0.78);
+  text-align: left;
+}
+
 .library-main {
   position: relative;
   min-width: 0;
