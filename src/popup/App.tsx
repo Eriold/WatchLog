@@ -56,6 +56,7 @@ import {
   getLocalizedMediaTypeLabel,
   getSortedLocalizedLists,
 } from '../shared/i18n/helpers'
+import { getDetectionTitleCandidates } from '../shared/detection/title-candidates'
 import { useI18n } from '../shared/i18n/useI18n'
 import { CustomSelect } from '../shared/ui/CustomSelect'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
@@ -217,6 +218,21 @@ function JumpToLibraryIcon() {
   )
 }
 
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="action-icon popup-save-check-icon">
+      <path
+        d="m5.5 12.5 4.1 4.1L18.5 7.7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.2"
+      />
+    </svg>
+  )
+}
+
 function SyncStatusGlyph({ synced, className }: { synced: boolean; className?: string }) {
   if (synced) {
     return (
@@ -259,6 +275,21 @@ function getTitleInitials(title: string): string {
   }
 
   return tokens.map((token) => token[0]?.toUpperCase() ?? '').join('')
+}
+
+function getPopupTitleSuggestions(
+  detection: DetectionResult | null,
+  metadata: MetadataCard | null,
+  matchedEntry: LibraryEntry | null,
+): string[] {
+  if (!detection) {
+    return []
+  }
+
+  return getDetectionTitleCandidates(
+    detection,
+    metadata ?? matchedEntry?.catalog ?? null,
+  )
 }
 
 function getPopupOtherTitles(
@@ -841,6 +872,7 @@ export function PopupApp() {
     params?: Record<string, string>
   }>({ key: 'common.loading' })
   const [busy, setBusy] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle')
   const [analyzing, setAnalyzing] = useState(false)
   const [catalogImportBusy, setCatalogImportBusy] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
@@ -1165,6 +1197,11 @@ export function PopupApp() {
     detection,
     matchedLibraryEntryFromDetection,
   )
+  const titleSuggestions = getPopupTitleSuggestions(
+    detection,
+    resolvedMetadata,
+    matchedLibraryEntry,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -1236,6 +1273,7 @@ export function PopupApp() {
 
   useEffect(() => {
     if (!detection || !libraryHydrated) {
+      setSaveState('idle')
       return
     }
 
@@ -1243,6 +1281,8 @@ export function PopupApp() {
     if (syncedDetectionSignature === signature) {
       return
     }
+
+    setSaveState('idle')
 
     if (matchedLibraryEntry) {
       setSelectedList(matchedLibraryEntry.activity.status)
@@ -1335,6 +1375,7 @@ export function PopupApp() {
 
       setSnapshot(response.snapshot)
       setListOptions((current) => buildPopupListOptions(response.snapshot.lists, current))
+      setSaveState('saved')
       setMessageState({
         key: 'popup.savedUnder',
         params: {
@@ -1345,6 +1386,12 @@ export function PopupApp() {
       setBusy(false)
     }
   }
+
+  const saveButtonLabel = saveState === 'saved'
+    ? 'Progreso actualizado'
+    : matchedLibraryEntry
+      ? t('popup.saveProgress')
+      : t('popup.saveSuggestion')
 
   async function resolveCatalogImportList(): Promise<{ listId: string; label: string }> {
     const availableLists = getSortedLocalizedLists(
@@ -1528,6 +1575,30 @@ export function PopupApp() {
       catalogId: matchedLibraryEntry.catalog.id,
       query: matchedLibraryEntry.catalog.title,
     })
+  }
+
+  function handleSelectSuggestedTitle(title: string): void {
+    if (!detection || !title.trim()) {
+      return
+    }
+
+    const nextTitle = title.trim()
+    setDetection((current) => {
+      if (!current) {
+        return current
+      }
+
+      if (current.title === nextTitle && current.normalizedTitle === normalizeTitle(nextTitle)) {
+        return current
+      }
+
+      return {
+        ...current,
+        title: nextTitle,
+        normalizedTitle: normalizeTitle(nextTitle),
+      }
+    })
+    setResolvedMetadata(null)
   }
 
   async function handleCatalogImportAction(): Promise<void> {
@@ -1771,6 +1842,32 @@ export function PopupApp() {
                           </div>
                         </div>
                       ) : null}
+
+                      {titleSuggestions.length > 1 ? (
+                        <div className="popup-title-suggestion-block">
+                          <p className="popup-title-alias-label">Sugerencias de título</p>
+                          <div className="popup-title-suggestion-list">
+                            {titleSuggestions.map((title) => {
+                              const isActive = normalizeTitle(title) === normalizeTitle(detection.title)
+
+                              return (
+                                <button
+                                  key={title}
+                                  className={`popup-title-suggestion-chip ${isActive ? 'is-active' : ''}`}
+                                  type="button"
+                                  onClick={() => handleSelectSuggestedTitle(title)}
+                                  title={title}
+                                >
+                                  <span className="popup-title-suggestion-text">{title}</span>
+                                  {isActive ? (
+                                    <span className="popup-title-suggestion-current">Actual</span>
+                                  ) : null}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1893,8 +1990,20 @@ export function PopupApp() {
               </article>
 
               <div className="popup-footer popup-primary-actions">
-                <button className="button" type="button" disabled={busy} onClick={handleSave}>
-                  {matchedLibraryEntry ? t('popup.saveProgress') : t('popup.saveSuggestion')}
+                <button
+                  className={`button popup-save-button ${saveState === 'saved' ? 'is-saved' : ''}`}
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSave}
+                >
+                  {saveState === 'saved' ? (
+                    <span className="popup-save-button-content" aria-live="polite">
+                      <CheckIcon />
+                      <span>{saveButtonLabel}</span>
+                    </span>
+                  ) : (
+                    saveButtonLabel
+                  )}
                 </button>
                 <button className="button secondary" type="button" onClick={() => void openLibrary()}>
                   {t('popup.openFullLibrary')}
@@ -1937,12 +2046,7 @@ export function PopupApp() {
             </div>
 
             <div className="popup-footer popup-primary-actions">
-              <button
-                className="button"
-                type="button"
-                disabled={analyzing}
-                onClick={handleRetryAnalysis}
-              >
+              <button className="button" type="button" disabled={analyzing} onClick={handleRetryAnalysis}>
                 {t('popup.reanalyzeTab')}
               </button>
               <button className="button secondary" type="button" onClick={() => void openLibrary()}>

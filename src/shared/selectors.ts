@@ -17,6 +17,48 @@ import {
   getMetadataSeasonNumber,
 } from './season'
 
+function getCanonicalSourceUrlKey(rawUrl?: string): string | null {
+  if (!rawUrl) {
+    return null
+  }
+
+  try {
+    const url = new URL(rawUrl)
+    const segments = url.pathname.split('/').filter(Boolean)
+
+    if (segments.length === 0) {
+      return `${url.hostname.replace(/^www\./i, '')}|`
+    }
+
+    const canonicalSegments =
+      segments.length > 1 && /^\d+$/.test(segments[segments.length - 1] ?? '')
+        ? segments.slice(0, -1)
+        : segments
+
+    return `${url.hostname.replace(/^www\./i, '')}|${canonicalSegments.join('/')}`
+  } catch {
+    return null
+  }
+}
+
+function getEntrySourceUrlKeys(entry: LibraryEntry): string[] {
+  const keys = new Set<string>()
+
+  const lastSourceKey = getCanonicalSourceUrlKey(entry.activity.lastSource?.url)
+  if (lastSourceKey) {
+    keys.add(lastSourceKey)
+  }
+
+  for (const source of entry.activity.sourceHistory) {
+    const key = getCanonicalSourceUrlKey(source.url)
+    if (key) {
+      keys.add(key)
+    }
+  }
+
+  return Array.from(keys)
+}
+
 export function toLibraryEntries(snapshot: WatchLogSnapshot): LibraryEntry[] {
   return snapshot.activity
     .map((activity) => {
@@ -55,6 +97,21 @@ export function findMatchingLibraryEntry(
 
   if (exactPrimaryMatch) {
     return exactPrimaryMatch
+  }
+
+  const detectionSourceKey = getCanonicalSourceUrlKey(detection.url)
+  if (detectionSourceKey) {
+    const canonicalSourceMatch = entries.find((entry) => {
+      return getEntrySourceUrlKeys(entry).includes(detectionSourceKey)
+    })
+
+    if (
+      canonicalSourceMatch &&
+      areMediaTypesCompatible(canonicalSourceMatch.catalog.mediaType, detection.mediaType) &&
+      areSeasonNumbersCompatible(getLibraryEntrySeasonNumber(canonicalSourceMatch), detectionSeasonNumber)
+    ) {
+      return canonicalSourceMatch
+    }
   }
 
   return (

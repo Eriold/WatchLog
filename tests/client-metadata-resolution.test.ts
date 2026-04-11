@@ -86,4 +86,69 @@ describe('resolveDetectionMetadata', () => {
     expect(metadata?.poster).toBe('https://img.test/bookworm-part4.jpg')
     expect(metadata?.mediaType).toBe('manga')
   })
+
+  it('searches AniList with slug and page-title candidates when the raw title is polluted', async () => {
+    const requestedSearches: string[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const payload = JSON.parse(String(init?.body ?? '{}')) as {
+        variables?: { search?: string }
+      }
+      const search = payload.variables?.search ?? ''
+      requestedSearches.push(search)
+
+      const media =
+        search === 'Dragon Ball'
+          ? [
+              {
+                id: 21,
+                type: 'ANIME',
+                format: 'TV',
+                status: 'FINISHED',
+                episodes: 153,
+                title: {
+                  romaji: 'Dragon Ball',
+                  english: 'Dragon Ball',
+                  native: 'ドラゴンボール',
+                },
+                description: 'Mock AniList metadata',
+                genres: ['Adventure'],
+                coverImage: {
+                  large: 'https://img.test/dragon-ball.jpg',
+                },
+              },
+            ]
+          : []
+
+      return new Response(
+        JSON.stringify({
+          data: {
+            Page: {
+              media,
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      )
+    })
+
+    const metadata = await resolveDetectionMetadata({
+      title: 'Episodio 1 Latino - Dragon Ball',
+      normalizedTitle: normalizeTitle('Episodio 1 Latino - Dragon Ball'),
+      mediaType: 'anime',
+      sourceSite: 'jkanime.net',
+      url: 'https://jkanime.net/dragon-ball/1/',
+      favicon: 'https://jkanime.net/favicon.ico',
+      pageTitle: 'Episodio 1 Latino - Dragon Ball',
+      episode: 1,
+      progressLabel: 'Ep 1',
+      confidence: 0.8,
+    })
+
+    expect(metadata?.id).toBe('anilist:21')
+    expect(requestedSearches).toContain('Dragon Ball')
+  })
 })

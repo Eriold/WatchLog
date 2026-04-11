@@ -338,6 +338,31 @@ describe('detectCurrentDocument', () => {
     expect(result?.mediaType).toBe('anime')
   })
 
+  it('prefers the JKanime path slug when the page title is polluted by episode text', () => {
+    const fixture = `
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Dragon Ball 2 Sub Español Online gratis - JkAnime</title>
+        </head>
+        <body>
+          <main>
+            <p>Capítulo completo</p>
+          </main>
+        </body>
+      </html>
+    `
+
+    const result = detectCurrentDocument(parseFixture(fixture), 'https://jkanime.net/dragon-ball/2/')
+
+    expect(result?.sourceSite).toBe('jkanime.net')
+    expect(result?.title).toBe('Dragon Ball')
+    expect(result?.normalizedTitle).toBe('dragon ball')
+    expect(result?.episode).toBe(2)
+    expect(result?.progressLabel).toBe('Ep 2')
+    expect(result?.mediaType).toBe('anime')
+  })
+
   it('prefers declared svg or png favicons over the default origin ico path', () => {
     const fixture = `
       <!doctype html>

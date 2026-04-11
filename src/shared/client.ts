@@ -14,6 +14,7 @@ import type {
   WatchLogMessage,
 } from './messages'
 import { createMetadataProvider } from './metadata/create-provider'
+import { getDetectionSearchQueries } from './detection/title-candidates'
 import { LocalStorageProvider } from './storage/local-storage-provider'
 import { WatchLogRepository } from './storage/repository'
 import type {
@@ -50,14 +51,7 @@ export async function saveDetection(payload: SaveDetectionInput) {
 }
 
 export async function resolveDetectionMetadata(detection: DetectionResult) {
-  const queries = Array.from(
-    new Set(
-      [
-        detection.title,
-        detection.normalizedTitle,
-      ].filter((query) => query.trim()),
-    ),
-  )
+  const queries = getDetectionSearchQueries(detection)
 
   if (detection.season !== undefined) {
     queries.push(`${detection.title} ${detection.season}`)
