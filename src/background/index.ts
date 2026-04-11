@@ -344,11 +344,9 @@ chrome.runtime.onMessage.addListener((message: WatchLogMessage, sender, sendResp
         return
       }
       case 'watchlog/get-library': {
-        console.log('[WatchLog] background:get-library:start')
         const response: LibraryResponse = {
           snapshot: await repository.getSnapshot(),
         }
-        console.log('[WatchLog] background:get-library:response', response)
         sendResponse(response)
         return
       }
@@ -370,11 +368,7 @@ chrome.runtime.onMessage.addListener((message: WatchLogMessage, sender, sendResp
         return
       }
       case 'watchlog/add-list': {
-        console.log('[WatchLog] background:add-list:start', {
-          label: message.payload.label,
-        })
         const response: AddListResponse = await repository.addList(message.payload.label)
-        console.log('[WatchLog] background:add-list:response', response)
         sendResponse(response)
         return
       }

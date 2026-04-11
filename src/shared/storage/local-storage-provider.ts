@@ -53,12 +53,6 @@ export class LocalStorageProvider implements StorageProvider {
       readLists(),
     ])
 
-    console.log('[WatchLog] localStorageProvider:getSnapshot', {
-      catalogCount: catalog.length,
-      activityCount: activity.length,
-      lists,
-    })
-
     return { catalog, activity, lists }
   }
 
@@ -73,11 +67,6 @@ export class LocalStorageProvider implements StorageProvider {
   async addCustomList(label: string): Promise<WatchListDefinition> {
     const lists = await readLists()
     const trimmedLabel = label.trim()
-    console.log('[WatchLog] addCustomList:before', {
-      label,
-      trimmedLabel,
-      lists,
-    })
 
     if (!trimmedLabel) {
       throw new Error('List label cannot be empty.')
@@ -103,11 +92,6 @@ export class LocalStorageProvider implements StorageProvider {
     }
 
     await writeLists([...lists, list])
-    const persistedLists = await readLists()
-    console.log('[WatchLog] addCustomList:after', {
-      createdList: list,
-      persistedLists,
-    })
     return list
   }
 

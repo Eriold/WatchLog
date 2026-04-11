@@ -560,13 +560,8 @@ export function SidePanelApp() {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      console.log('[WatchLog] library:bootstrap:start')
       try {
         const [libraryResponse, explorerResponse] = await Promise.all([getLibrary(), getExplorer()])
-        console.log('[WatchLog] library:bootstrap:response', {
-          libraryResponse,
-          explorerResponse,
-        })
         if (cancelled) return
         startTransition(() => {
           setSnapshot(libraryResponse.snapshot)
@@ -604,11 +599,8 @@ export function SidePanelApp() {
         return
       }
 
-      console.log('[WatchLog] library:storage-change', { areaName, changes })
-
       try {
         const response = await getLibrary()
-        console.log('[WatchLog] library:storage-refresh', response.snapshot.lists)
         startTransition(() => {
           setSnapshot(response.snapshot)
         })
@@ -812,16 +804,9 @@ export function SidePanelApp() {
 
   async function handleAddList(): Promise<void> {
     if (!newListLabel.trim()) return
-    console.log('[WatchLog] handleAddList:start', {
-      label: newListLabel,
-      selectedViewId,
-      currentLists: snapshot.lists,
-    })
     try {
       const response = await addList(newListLabel.trim())
-      console.log('[WatchLog] handleAddList:response', response)
       const libraryResponse = await getLibrary()
-      console.log('[WatchLog] handleAddList:librarySnapshot', libraryResponse.snapshot.lists)
       setSnapshot(libraryResponse.snapshot)
       setSelectedViewId(response.list.id)
       setSelectedCatalogId(null)
