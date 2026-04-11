@@ -286,11 +286,15 @@ async function resolveActiveDetection(
 
 chrome.runtime.onInstalled.addListener(() => {
   void repository.getSnapshot()
-  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  if (chrome.sidePanel?.setPanelBehavior) {
+    void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  }
 })
 
 chrome.runtime.onStartup.addListener(() => {
-  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  if (chrome.sidePanel?.setPanelBehavior) {
+    void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  }
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
