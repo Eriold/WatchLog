@@ -400,6 +400,51 @@ describe('WatchLogRepository', () => {
     expect(response.entry.activity.lastSource?.progressText).toBe('Ep 12/153')
   })
 
+  it('reuses an existing JKanime entry across episode URLs that share the same slug', async () => {
+    const repository = new WatchLogRepository(
+      new MemoryStorageProvider(),
+      new MockMetadataProvider(),
+    )
+
+    const first = await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'anime',
+        sourceSite: 'JKAnime',
+        url: 'https://jkanime.net/dragon-ball/1/',
+        favicon: 'https://jkanime.net/favicon.ico',
+        pageTitle: 'Episodio 1 - Dragon Ball - JkAnime',
+        episode: 1,
+        progressLabel: 'Ep 1',
+        confidence: 0.85,
+      },
+    })
+
+    const second = await repository.saveDetection({
+      listId: 'watching',
+      detection: {
+        title: 'Dragon Ball',
+        normalizedTitle: 'dragon ball',
+        mediaType: 'anime',
+        sourceSite: 'JKAnime',
+        url: 'https://jkanime.net/dragon-ball/2/',
+        favicon: 'https://jkanime.net/favicon.ico',
+        pageTitle: 'Episodio 2 - Dragon Ball - JkAnime',
+        episode: 2,
+        progressLabel: 'Ep 2',
+        confidence: 0.85,
+      },
+    })
+
+    expect(first.entry.catalog.id).toBe(second.entry.catalog.id)
+    expect(second.snapshot.catalog).toHaveLength(1)
+    expect(second.entry.activity.sourceHistory).toHaveLength(2)
+    expect(second.entry.activity.currentProgress.episode).toBe(2)
+    expect(second.entry.activity.lastSource?.url).toBe('https://jkanime.net/dragon-ball/2/')
+  })
+
   it('replaces an unofficial stored poster when official metadata becomes available later', async () => {
     const repository = new WatchLogRepository(
       new MemoryStorageProvider(),

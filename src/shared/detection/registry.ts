@@ -2,8 +2,10 @@ import type { DetectionAdapter, DetectionResult } from '../types'
 import { createDetectionContext } from './helpers'
 import { genericAdapter } from './adapters/generic'
 import { maxAdapter } from './adapters/max'
+import { mangaDexAdapter } from './adapters/mangadex'
 import { netflixAdapter } from './adapters/netflix'
 import { primeAdapter } from './adapters/prime'
+import { jkanimeAdapter } from './adapters/jkanime'
 import { shadowMangaAdapter } from './adapters/shadowmanga'
 import { youtubeAdapter } from './adapters/youtube'
 
@@ -11,6 +13,8 @@ const adapters: DetectionAdapter[] = [
   netflixAdapter,
   maxAdapter,
   primeAdapter,
+  mangaDexAdapter,
+  jkanimeAdapter,
   youtubeAdapter,
   shadowMangaAdapter,
   genericAdapter,

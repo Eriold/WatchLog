@@ -5,6 +5,25 @@ import {
 } from '../utils/favicon'
 import { compactText, normalizeTitle } from '../utils/normalize'
 
+function toTitleCase(value: string): string {
+  return value
+    .split(' ')
+    .map((word) => {
+      if (!word) {
+        return word
+      }
+
+      return word[0]!.toUpperCase() + word.slice(1)
+    })
+    .join(' ')
+}
+
+export function compactTitleSlug(value: string): string {
+  return toTitleCase(
+    compactText(decodeURIComponent(value).replace(/[-_]+/g, ' ')).replace(/\s+/g, ' '),
+  )
+}
+
 export function createDetectionContext(
   document: Document,
   href = window.location.href,

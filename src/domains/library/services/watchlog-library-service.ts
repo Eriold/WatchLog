@@ -1,7 +1,10 @@
 import { hydrateDetectionWithMetadata } from '../../../shared/metadata/detection-hydration'
 import type { MetadataProvider } from '../../../shared/metadata/provider'
+import { findMatchingLibraryEntry } from '../../../shared/selectors'
+import { rememberSiteTitleAliases } from '../../../shared/detection/site-title-aliases'
 import type { StorageProvider } from '../../../shared/storage/provider'
 import type {
+  CatalogEntry,
   ExportActivityPayload,
   ExportCatalogPayload,
   LibraryEntry,
@@ -43,8 +46,10 @@ export class WatchLogLibraryService {
     input: SaveDetectionInput,
   ): Promise<{ entry: LibraryEntry; snapshot: WatchLogSnapshot }> {
     const snapshot = await this.storageProvider.getSnapshot()
+    const localMatch = findMatchingLibraryEntry(snapshot, input.detection)
     const metadata =
       input.metadata ??
+      (localMatch ? this.catalogToMetadataCard(localMatch.catalog) : undefined) ??
       (input.skipMetadataLookup
         ? undefined
         : await this.metadataProvider.findByNormalizedTitle(input.detection.normalizedTitle))
@@ -88,10 +93,39 @@ export class WatchLogLibraryService {
     }
 
     await this.storageProvider.saveSnapshot(nextSnapshot)
+    await rememberSiteTitleAliases({
+      siteKey: hydratedDetection.sourceSite,
+      canonicalTitle: catalog.title,
+      aliases: catalog.aliases ?? [],
+    })
 
     return {
       entry: { catalog, activity: updatedActivity },
       snapshot: nextSnapshot,
+    }
+  }
+
+  private catalogToMetadataCard(catalog: CatalogEntry): MetadataCard {
+    return {
+      id: catalog.id,
+      title: catalog.title,
+      normalizedTitle: catalog.normalizedTitle,
+      aliases: catalog.aliases,
+      seasonNumber: catalog.seasonNumber,
+      mediaType: catalog.mediaType,
+      poster: catalog.poster,
+      backdrop: catalog.backdrop,
+      genres: catalog.genres,
+      description: catalog.description ?? '',
+      publicationStatus: catalog.publicationStatus,
+      startDate: catalog.startDate,
+      endDate: catalog.endDate,
+      releaseYear: catalog.releaseYear,
+      runtime: catalog.runtime,
+      seasonCount: catalog.seasonCount,
+      episodeCount: catalog.episodeCount,
+      chapterCount: catalog.chapterCount,
+      score: catalog.score,
     }
   }
 
