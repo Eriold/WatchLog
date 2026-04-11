@@ -17,12 +17,9 @@ import { EXPLORER_TAB_ID } from '../shared/constants'
 import { parseLibraryNavigationTarget } from '../shared/navigation'
 import {
   buildProgressStateFromControl,
-  getProgressCurrentValue as getProgressCurrentValueForState,
   getProgressPercentForState,
-  getProgressTotalValue as getProgressTotalValueForState,
   getResolvedProgressState,
   getStructuredProgressControl,
-  getStructuredProgressText,
 } from '../shared/progress'
 import {
   getCardSeasonCountBadge,
@@ -38,52 +35,28 @@ import {
 } from '../shared/catalog-sync'
 import type {
   DetectionResult,
-  FuzzyDate,
   LibraryEntry,
-  MediaType,
   MetadataCard,
   WatchListDefinition,
   WatchLogSnapshot,
 } from '../shared/types'
 import {
   formatLocalizedDate,
-  formatLocalizedFuzzyDate,
   getLocalizedListDefinitionLabel,
   getLocalizedListLabel,
   getLocalizedMediaTypeLabel,
-  getLocalizedPublicationStatusLabel,
   getLocalizedProgressLabel,
 } from '../shared/i18n/helpers'
 import { useI18n } from '../shared/i18n/useI18n'
 import { LanguageSelect } from '../shared/ui/LanguageSelect'
 import { CustomSelect } from '../shared/ui/CustomSelect'
 import { TranslatedDescription } from '../shared/ui/TranslatedDescription'
+import { EntryDetailDrawer } from './EntryDetailDrawer'
+import type { EntryDraft } from './types'
 import './sidepanel.css'
 
 const ALL_TITLES_VIEW_ID = 'all-titles'
 const FAVORITES_VIEW_ID = 'favorites'
-
-type EntryDraft = {
-  title: string
-  mediaType: MediaType
-  notes: string
-  progressText: string
-  progressValue: number | null
-  listId: string
-  favorite: boolean
-}
-
-const EDITABLE_MEDIA_TYPES: MediaType[] = [
-  'anime',
-  'manga',
-  'manhwa',
-  'manhua',
-  'novel',
-  'series',
-  'movie',
-  'video',
-  'unknown',
-]
 
 function getInitialSnapshot(): WatchLogSnapshot {
   return { catalog: [], activity: [], lists: [] }
@@ -210,14 +183,6 @@ function getDraftProgressState(entry: LibraryEntry, draft: EntryDraft) {
   )
 }
 
-function getProgressCurrentValue(progress: ReturnType<typeof getEntryDisplayProgress>): string {
-  return getProgressCurrentValueForState(progress)
-}
-
-function getProgressTotalValue(progress: ReturnType<typeof getEntryDisplayProgress>): string {
-  return getProgressTotalValueForState(progress)
-}
-
 function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n>['t']): string {
   if (item.id.startsWith('anilist:')) {
     return 'AniList'
@@ -228,12 +193,6 @@ function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n
 
 function getMediaTypeBadgeClass(mediaType: LibraryEntry['catalog']['mediaType']): string {
   return `type-${mediaType}`
-}
-
-function getOtherTitles(
-  item: Pick<MetadataCard, 'aliases'> & Pick<LibraryEntry['catalog'], 'title'>,
-): string[] {
-  return (item.aliases ?? []).filter((title) => title.trim() && title !== item.title)
 }
 
 function formatCommunityScore(score?: number): string | null {
@@ -337,14 +296,6 @@ function getLibraryCardSeasonBadge(entry: LibraryEntry): string | null {
     entry.catalog.episodeCount ?? entry.activity.currentProgress.episodeTotal,
     entry.catalog.chapterCount ?? entry.activity.currentProgress.chapterTotal,
   )
-}
-
-function getTechnicalDateLabel(
-  value: FuzzyDate | undefined,
-  locale: ReturnType<typeof useI18n>['locale'],
-  t: ReturnType<typeof useI18n>['t'],
-): string {
-  return formatLocalizedFuzzyDate(value, locale) ?? t('common.unknown')
 }
 
 function SettingsIcon({ className }: { className?: string }) {
@@ -1300,104 +1251,106 @@ export function SidePanelApp() {
   return (
     <div className="sidepanel-shell library-shell">
       <aside className="library-sidebar">
-        <div className="library-brand">
-          <div className="library-brand-mark">
-            <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+        <div className="library-sidebar-inner">
+          <div className="library-brand">
+            <div className="library-brand-mark">
+              <img className="brand-icon" src="/icons/favicon-32x32.png" alt="WatchLog logo" />
+            </div>
+            <div>
+              <h1 className="library-brand-title">{t('common.appName')}</h1>
+              <p className="library-brand-status">{t('library.statusLocalFirst')}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="library-brand-title">{t('common.appName')}</h1>
-            <p className="library-brand-status">{t('library.statusLocalFirst')}</p>
-          </div>
-        </div>
 
-        <nav className="library-nav">
-          {primaryViews.map((view) => (
-            <button
-              key={view.id}
-              className={`library-nav-button ${selectedViewId === view.id ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => handleSelectView(view.id)}
-            >
-              <div className={`content-elements ${selectedViewId === view.id ? 'is-active' : ''}`}>
-                <span className="library-nav-icon">
-                  <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
-                </span>
-                <span className="library-nav-copy">
-                  <strong>{view.label}</strong>
-                  <span>
-                    {t(
-                      getViewCount(view.id, entries, explorerItems) === 1
-                        ? 'library.items.one'
-                        : 'library.items.other',
-                      { count: getViewCount(view.id, entries, explorerItems) },
-                    )}
-                  </span>
-                </span>
-              </div>
-            </button>
-          ))}
-        </nav>
-
-        <div className="library-sidebar-section">
-          <p className="library-sidebar-label">{t('library.queues')}</p>
-          <div className="library-queue-list">
-            {queueLists.map((list) => (
-              <div
-                key={list.id}
-                className={`queue-list-item is-removable ${selectedViewId === list.id ? 'is-active' : ''}`}
+          <nav className="library-nav">
+            {primaryViews.map((view) => (
+              <button
+                key={view.id}
+                className={`library-nav-button ${selectedViewId === view.id ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => handleSelectView(view.id)}
               >
-                <button
-                  className="queue-list-main"
-                  type="button"
-                  onClick={() => handleSelectView(list.id)}
-                >
-                  <strong>{getLocalizedListDefinitionLabel(list, t)}</strong>
-                  <span>
-                    {t(
-                      getListEntryCount(list.id, entries) === 1
-                        ? 'library.items.one'
-                        : 'library.items.other',
-                      { count: getListEntryCount(list.id, entries) },
-                    )}
+                <div className={`content-elements ${selectedViewId === view.id ? 'is-active' : ''}`}>
+                  <span className="library-nav-icon">
+                    <NavGlyph kind={view.icon} className="library-nav-icon-symbol" />
                   </span>
-                </button>
-                <button
-                  className="queue-list-settings"
-                  type="button"
-                  title={t('library.listSettings')}
-                  aria-label={t('library.listSettings')}
-                  onClick={() => handleOpenListSettings(list)}
-                >
-                  <SettingsIcon className="queue-settings-icon" />
-                </button>
-              </div>
+                  <span className="library-nav-copy">
+                    <strong>{view.label}</strong>
+                    <span>
+                      {t(
+                        getViewCount(view.id, entries, explorerItems) === 1
+                          ? 'library.items.one'
+                          : 'library.items.other',
+                        { count: getViewCount(view.id, entries, explorerItems) },
+                      )}
+                    </span>
+                  </span>
+                </div>
+              </button>
             ))}
-          </div>
-        </div>
+          </nav>
 
-        <div className="library-sidebar-section">
-          <p className="library-sidebar-label">{t('library.createList')}</p>
-          <input
-            className="field"
-            value={newListLabel}
-            placeholder={t('library.createListPlaceholder')}
-            onChange={(event) => setNewListLabel(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void handleAddList()
-              }
-            }}
-          />
-          <button className="button secondary" type="button" onClick={handleAddList}>
-            {t('library.addList')}
+          <div className="library-sidebar-section">
+            <p className="library-sidebar-label">{t('library.queues')}</p>
+            <div className="library-queue-list">
+              {queueLists.map((list) => (
+                <div
+                  key={list.id}
+                  className={`queue-list-item is-removable ${selectedViewId === list.id ? 'is-active' : ''}`}
+                >
+                  <button
+                    className="queue-list-main"
+                    type="button"
+                    onClick={() => handleSelectView(list.id)}
+                  >
+                    <strong>{getLocalizedListDefinitionLabel(list, t)}</strong>
+                    <span>
+                      {t(
+                        getListEntryCount(list.id, entries) === 1
+                          ? 'library.items.one'
+                          : 'library.items.other',
+                        { count: getListEntryCount(list.id, entries) },
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    className="queue-list-settings"
+                    type="button"
+                    title={t('library.listSettings')}
+                    aria-label={t('library.listSettings')}
+                    onClick={() => handleOpenListSettings(list)}
+                  >
+                    <SettingsIcon className="queue-settings-icon" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="library-sidebar-section">
+            <p className="library-sidebar-label">{t('library.createList')}</p>
+            <input
+              className="field"
+              value={newListLabel}
+              placeholder={t('library.createListPlaceholder')}
+              onChange={(event) => setNewListLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void handleAddList()
+                }
+              }}
+            />
+            <button className="button secondary" type="button" onClick={handleAddList}>
+              {t('library.addList')}
+            </button>
+          </div>
+
+          <button className="library-settings-button" type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
+            <SettingsIcon className="library-settings-icon" />
+            <span>{t('common.settings')}</span>
           </button>
         </div>
-
-        <button className="library-settings-button" type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
-          <SettingsIcon className="library-settings-icon" />
-          <span>{t('common.settings')}</span>
-        </button>
       </aside>
 
       <div className="library-main">
@@ -1713,481 +1666,30 @@ export function SidePanelApp() {
         </main>
       </div>
 
-      <aside className={`entry-detail-drawer ${selectedEntry || selectedExplorerItem ? 'is-open' : ''}`}>
-        {selectedEntry && selectedDraft ? (
-          <>
-            <div className="entry-detail-header">
-              <div className="entry-detail-badges">
-                <span className={`media-badge ${getMediaTypeBadgeClass(selectedDraft.mediaType)}`}>
-                  {getLocalizedMediaTypeLabel(selectedDraft.mediaType, t)}
-                </span>
-                <span className="media-badge tone-planned">
-                  {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
-                </span>
-              </div>
-              <button
-                className={`favorite-toggle-chip ${selectedDraft.favorite ? 'is-active' : ''}`}
-                type="button"
-                onClick={() => void handleToggleFavorite()}
-              >
-                {selectedDraft.favorite ? t('library.favoriteEnabled') : t('library.markFavorite')}
-              </button>
-            </div>
-
-            <div className="entry-detail-body">
-              <div className="entry-detail-poster-wrap">
-                <div className="entry-detail-poster-glow" />
-                <div className="entry-detail-poster-card">
-                  {getCatalogSyncState(selectedEntry.catalog) === 'pending' &&
-                  !selectedEntry.catalog.poster ? (
-                    <div className="entry-detail-poster entry-detail-poster-placeholder" aria-hidden="true" />
-                  ) : (
-                    <img
-                      className="entry-detail-poster"
-                      src={selectedEntry.catalog.poster ?? getTemporaryPoster(selectedEntry.catalog.normalizedTitle)}
-                      alt={selectedEntry.catalog.title}
-                    />
-                  )}
-                  <span className="entry-detail-status-pill">
-                    {getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="entry-detail-title-block">
-                <h3 className="entry-detail-title">{selectedEntry.catalog.title}</h3>
-                <p className="entry-detail-platform">
-                  {t('library.detectedOn', {
-                    site: selectedEntry.activity.lastSource?.siteName ?? t('library.manualEntry'),
-                  })}
-                </p>
-              </div>
-
-              {getOtherTitles(selectedEntry.catalog).length > 0 ? (
-                <div className="field-card">
-                  <p className="library-detail-kicker">{t('library.otherTitles')}</p>
-                  <div className="genre-row">
-                    {getOtherTitles(selectedEntry.catalog).map((title) => (
-                      <span className="genre-chip" key={title}>{title}</span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="entry-progress-module">
-                <div className="entry-progress-head">
-                  <div className="entry-progress-main">
-                    <span className="entry-progress-label">{t('library.entryProgressModule')}</span>
-                    <div className="entry-progress-numbers">
-                      <strong>{getProgressCurrentValue(selectedEntryDisplayProgress!)}</strong>
-                      <span>/ {getProgressTotalValue(selectedEntryDisplayProgress!)}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="entry-progress-track">
-                  <div
-                    className="entry-progress-value"
-                    style={{ width: `${selectedEntryProgressPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="entry-detail-actions-stack">
-                <button className="button" type="button" onClick={handleSaveEntry}>
-                  {t('library.saveChanges')}
-                </button>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={isEntryAniListRefreshing}
-                  onClick={() => void handleRefreshEntryAniList()}
-                >
-                  {isEntryAniListRefreshing ? t('library.anilistRefreshRunning') : t('library.anilistRefreshAction')}
-                </button>
-                {selectedEntry.activity.lastSource?.url ? (
-                  <a
-                    className="button secondary"
-                    href={selectedEntry.activity.lastSource.url}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {t('library.resumeSource')}
-                  </a>
-                ) : null}
-              </div>
-
-              <div className="field-card">
-                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <TranslatedDescription
-                  className="library-detail-copy"
-                  emptyFallback={t('library.noMetadataYet')}
-                  locale={locale}
-                  t={t}
-                  text={selectedEntry.catalog.description}
-                  appendGoogleAttribution
-                />
-              </div>
-
-              <div className="entry-detail-grid">
-                <div className="field-card field-card-wide">
-                  <label className="label" htmlFor="entry-title">
-                    {t('popup.titleLabel')}
-                  </label>
-                  <input
-                    id="entry-title"
-                    className="field"
-                    value={selectedDraft.title}
-                    onChange={(event) => updateDraft({ title: event.target.value })}
-                  />
-                </div>
-                <div className="field-card">
-                  <label className="label">
-                    {t('library.categoryTag')}
-                  </label>
-                  <CustomSelect
-                    value={selectedDraft.mediaType}
-                    onChange={(value) => updateDraft({ mediaType: value as MediaType })}
-                    options={EDITABLE_MEDIA_TYPES.map((mediaType) => ({
-                      value: mediaType,
-                      label: `${t('library.typePrefix')}: ${getLocalizedMediaTypeLabel(mediaType, t)}`,
-                    }))}
-                  />
-                </div>
-                <div className="field-card">
-                  <label className="label">
-                    {t('library.primaryList')}
-                  </label>
-                  <CustomSelect
-                    value={selectedDraft.listId}
-                    onChange={(value) => updateDraft({ listId: value })}
-                    options={snapshot.lists.map((list) => ({
-                      value: list.id,
-                      label: getLocalizedListDefinitionLabel(list, t),
-                    }))}
-                  />
-                </div>
-                <div className="field-card">
-                  <label className="label">
-                    {t('popup.progressLabel')}
-                  </label>
-                  {selectedEntryProgressControl ? (
-                    <CustomSelect
-                      value={selectedEntryProgressSelectValue}
-                      disabled={selectedDraft.listId === 'completed'}
-                      onChange={(nextValue) => {
-                        const value = Number.parseInt(nextValue, 10)
-                        updateDraft({
-                          progressValue: Number.isNaN(value) ? selectedEntryProgressControl.current : value,
-                          progressText: getStructuredProgressText(
-                            Number.isNaN(value) ? selectedEntryProgressControl.current : value,
-                            selectedEntryProgressControl.total,
-                          ),
-                        })
-                      }}
-                      options={Array.from(
-                        { length: selectedEntryProgressControl.total + 1 },
-                        (_, index) => index,
-                      ).map((value) => ({
-                        value: String(value),
-                        label: getStructuredProgressText(value, selectedEntryProgressControl.total),
-                      }))}
-                    />
-                  ) : (
-                    <input
-                      id="entry-progress"
-                      className="field"
-                      value={selectedDraft.progressText}
-                      onChange={(event) => updateDraft({ progressText: event.target.value })}
-                    />
-                  )}
-                </div>
-                <div className="field-card field-card-wide">
-                  <label className="label" htmlFor="entry-notes">
-                    {t('library.notes')}
-                  </label>
-                  <textarea
-                    id="entry-notes"
-                    className="textarea"
-                    value={selectedDraft.notes}
-                    onChange={(event) => updateDraft({ notes: event.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="field-card entry-technical-block">
-                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <div className="entry-technical-grid">
-                  <div>
-                    <span className="entry-technical-label">{t('library.primaryList')}</span>
-                    <strong>{getLocalizedListLabel(snapshot.lists, selectedDraft.listId, t)}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('popup.progressLabel')}</span>
-                    <strong>{getLocalizedProgressLabel(selectedEntryDisplayProgress!, t)}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.publicationStatus')}</span>
-                    <strong>
-                      {getLocalizedPublicationStatusLabel(
-                        selectedEntryDetails?.publicationStatus,
-                        t,
-                      )}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.startDate')}</span>
-                    <strong>
-                      {getTechnicalDateLabel(selectedEntryDetails?.startDate, locale, t)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.endDate')}</span>
-                    <strong>
-                      {getTechnicalDateLabel(selectedEntryDetails?.endDate, locale, t)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.genresLabel')}</span>
-                    <strong>
-                      {selectedEntryDetails?.genres && selectedEntryDetails.genres.length > 0
-                        ? selectedEntryDetails.genres.join(', ')
-                        : t('library.noMetadataYet')}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('common.search')}</span>
-                    <strong>{selectedEntry.activity.lastSource?.pageTitle ?? t('common.unknown')}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="field-card entry-history-block">
-                <div className="entry-history-head">
-                  <p className="library-detail-kicker">{t('library.entryHistory')}</p>
-                  <button
-                    className="list-settings-close"
-                    type="button"
-                    aria-label={t('library.entryClosePanel')}
-                    onClick={() => setSelectedCatalogId(null)}
-                  >
-                    <CloseIcon className="list-settings-close-icon" />
-                  </button>
-                </div>
-                <div className="history-table">
-                  {selectedEntry.activity.sourceHistory.length === 0 ? (
-                    <p className="library-detail-copy">{t('library.entryNoHistory')}</p>
-                  ) : (
-                    selectedEntry.activity.sourceHistory.map((source) => (
-                      <a
-                        key={source.id}
-                        className="history-row"
-                        href={source.url || '#'}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <div className="history-site">
-                          {source.favicon ? <img src={source.favicon} alt="" /> : null}
-                          <div>
-                            <strong>{source.siteName}</strong>
-                            <span>
-                              {getLocalizedProgressLabel(
-                                {
-                                  season: source.season,
-                                  episode: source.episode,
-                                  episodeTotal: source.episodeTotal,
-                                  chapter: source.chapter,
-                                  chapterTotal: source.chapterTotal,
-                                  progressText: source.progressText,
-                                },
-                                t,
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="history-date">
-                          {formatLocalizedDate(source.detectedAt, locale)}
-                        </span>
-                      </a>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="field-card list-settings-section list-settings-danger">
-                <p className="list-settings-action-copy">
-                  {t('library.deleteItemConfirmBody', { title: selectedEntry.catalog.title })}
-                </p>
-                <button className="button danger" type="button" onClick={handleRequestDeleteEntry}>
-                  {t('library.deleteItem')}
-                </button>
-              </div>
-            </div>
-          </>
-        ) : selectedExplorerItem ? (
-          <>
-            <div className="entry-detail-header">
-              <div className="entry-detail-badges">
-                <span className={`media-badge ${getMediaTypeBadgeClass(selectedExplorerItem.mediaType)}`}>
-                  {getLocalizedMediaTypeLabel(selectedExplorerItem.mediaType, t)}
-                </span>
-                <span className="media-badge tone-planned">{getExplorerSourceLabel(selectedExplorerItem, t)}</span>
-              </div>
-              <button
-                className="list-settings-close"
-                type="button"
-                aria-label={t('library.entryClosePanel')}
-                onClick={() => setSelectedExplorerId(null)}
-              >
-                <CloseIcon className="list-settings-close-icon" />
-              </button>
-            </div>
-
-            <div className="entry-detail-body">
-              <div className="entry-detail-poster-wrap">
-                <div className="entry-detail-poster-glow" />
-                <div className="entry-detail-poster-card">
-                  <img
-                    className="entry-detail-poster"
-                    src={selectedExplorerItem.poster ?? getTemporaryPoster(selectedExplorerItem.normalizedTitle)}
-                    alt={selectedExplorerItem.title}
-                  />
-                  <span className="entry-detail-status-pill">
-                    {getExplorerSourceLabel(selectedExplorerItem, t)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="entry-detail-title-block">
-                <h3 className="entry-detail-title">{selectedExplorerItem.title}</h3>
-                <p className="entry-detail-platform">
-                  {t('library.detectedOn', {
-                    site: getExplorerSourceLabel(selectedExplorerItem, t),
-                  })}
-                </p>
-              </div>
-
-              {getOtherTitles(selectedExplorerItem).length > 0 ? (
-                <div className="field-card">
-                  <p className="library-detail-kicker">{t('library.otherTitles')}</p>
-                  <div className="genre-row">
-                    {getOtherTitles(selectedExplorerItem).map((title) => (
-                      <span className="genre-chip" key={title}>{title}</span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="field-card">
-                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <TranslatedDescription
-                  className="library-detail-copy"
-                  emptyFallback={t('library.noMetadataYet')}
-                  locale={locale}
-                  t={t}
-                  text={selectedExplorerItem.description}
-                  appendGoogleAttribution
-                />
-              </div>
-
-              <div className="entry-detail-actions-stack">
-                {selectedExplorerMatch ? (
-                  <p
-                    className="explorer-existing-link explorer-existing-link-detail"
-                    onClick={() => handleOpenExistingExplorerEntry(selectedExplorerMatch)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        handleOpenExistingExplorerEntry(selectedExplorerMatch)
-                      }
-                    }}
-                    role="link"
-                    tabIndex={0}
-                  >
-                    {t('library.addedInList', {
-                      label: getLocalizedListLabel(snapshot.lists, selectedExplorerMatch.activity.status, t),
-                    })}
-                  </p>
-                ) : (
-                  <button className="button" type="button" onClick={() => void handleExplorerAdd(selectedExplorerItem)}>
-                    {t('library.addToLibrary')}
-                  </button>
-                )}
-              </div>
-
-              <div className="field-card entry-technical-block">
-                <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
-                <div className="entry-technical-grid">
-                  <div>
-                    <span className="entry-technical-label">{t('library.metaSource')}</span>
-                    <strong>{getExplorerSourceLabel(selectedExplorerItem, t)}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.publicationStatus')}</span>
-                    <strong>
-                      {getLocalizedPublicationStatusLabel(
-                        selectedExplorerItem.publicationStatus,
-                        t,
-                      )}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.startDate')}</span>
-                    <strong>
-                      {getTechnicalDateLabel(selectedExplorerItem.startDate, locale, t)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.endDate')}</span>
-                    <strong>
-                      {getTechnicalDateLabel(selectedExplorerItem.endDate, locale, t)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.genresLabel')}</span>
-                    <strong>
-                      {selectedExplorerItem.genres.length > 0
-                        ? selectedExplorerItem.genres.join(', ')
-                        : t('library.noMetadataYet')}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.releaseYear')}</span>
-                    <strong>{selectedExplorerItem.releaseYear ?? t('common.unknown')}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.scoreLabel')}</span>
-                    <strong>
-                      {selectedExplorerItem.score !== undefined
-                        ? String(selectedExplorerItem.score)
-                        : t('common.unknown')}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.episodeCount')}</span>
-                    <strong>{selectedExplorerItem.episodeCount ?? t('common.unknown')}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.chapterCount')}</span>
-                    <strong>{selectedExplorerItem.chapterCount ?? t('common.unknown')}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.seasonCount')}</span>
-                    <strong>{selectedExplorerItem.seasonCount ?? t('common.unknown')}</strong>
-                  </div>
-                  <div>
-                    <span className="entry-technical-label">{t('library.runtimeMinutes')}</span>
-                    <strong>
-                      {selectedExplorerItem.runtime !== undefined
-                        ? `${selectedExplorerItem.runtime} min`
-                        : t('common.unknown')}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </aside>
+      <EntryDetailDrawer
+        locale={locale}
+        snapshot={snapshot}
+        t={t}
+        selectedEntry={selectedEntry}
+        selectedDraft={selectedDraft}
+        selectedExplorerItem={selectedExplorerItem}
+        selectedExplorerMatch={selectedExplorerMatch}
+        selectedEntryDisplayProgress={selectedEntryDisplayProgress}
+        selectedEntryProgressControl={selectedEntryProgressControl}
+        selectedEntryProgressPercent={selectedEntryProgressPercent}
+        selectedEntryProgressSelectValue={selectedEntryProgressSelectValue}
+        selectedEntryDetails={selectedEntryDetails}
+        isEntryAniListRefreshing={isEntryAniListRefreshing}
+        onUpdateDraft={updateDraft}
+        onToggleFavorite={handleToggleFavorite}
+        onSaveEntry={handleSaveEntry}
+        onRefreshEntryAniList={handleRefreshEntryAniList}
+        onCloseSelectedEntry={() => setSelectedCatalogId(null)}
+        onCloseSelectedExplorer={() => setSelectedExplorerId(null)}
+        onDeleteEntry={handleRequestDeleteEntry}
+        onOpenExistingExplorerEntry={handleOpenExistingExplorerEntry}
+        onExplorerAdd={(item) => void handleExplorerAdd(item)}
+      />
 
       <div
         className={`list-settings-scrim ${activeOverlay ? 'is-visible' : ''}`}

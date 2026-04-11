@@ -15,16 +15,56 @@
 .library-sidebar {
   position: sticky;
   top: 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 22px;
   min-height: 100vh;
-  /* padding: 24px 18px; */
-  padding: 24px 0px;
+  padding: 0;
   background: rgba(5, 7, 14, 0.86);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(24px);
   z-index: 100;
+  overflow-x: hidden;
+  overflow-y: auto;
+  direction: rtl;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  --sidebar-scrollbar-width: 4px;
+  --sidebar-scrollbar-track: rgba(255, 255, 255, 0.02);
+  --sidebar-scrollbar-thumb: rgba(204, 151, 255, 0.34);
+  --sidebar-scrollbar-thumb-hover: rgba(204, 151, 255, 0.56);
+}
+
+.library-sidebar-inner {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 100%;
+  padding: 24px 0;
+  direction: ltr;
+}
+
+.library-sidebar::-webkit-scrollbar {
+  width: var(--sidebar-scrollbar-width);
+}
+
+.library-sidebar::-webkit-scrollbar-track {
+  background: var(--sidebar-scrollbar-track);
+}
+
+.library-sidebar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--sidebar-scrollbar-thumb);
+}
+
+.library-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-scrollbar-thumb-hover);
+}
+
+.library-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scrollbar-thumb) var(--sidebar-scrollbar-track);
 }
 
 .library-brand {
@@ -1462,7 +1502,14 @@
 
   .library-sidebar {
     position: static;
+    height: auto;
     min-height: auto;
+    overflow: visible;
+    direction: ltr;
+  }
+
+  .library-sidebar-inner {
+    direction: ltr;
   }
 
   .list-settings-scrim {
