@@ -126,6 +126,15 @@ export function findCatalogMatch(
     }
   }
 
+  if (metadataExternalIds.mangadex) {
+    const externalIdMatch = snapshot.catalog.find(
+      (item) => item.externalIds.mangadex === metadataExternalIds.mangadex,
+    )
+    if (externalIdMatch) {
+      return externalIdMatch
+    }
+  }
+
   const compatibleTitleMatch = snapshot.catalog.find((item) => {
     return (
       areMediaTypesCompatible(item.mediaType, targetMediaType) &&

@@ -22,7 +22,7 @@ import type { EntryDraft } from './types'
 
 type DetailEntryMetadata = Pick<
   MetadataCard,
-  'genres' | 'publicationStatus' | 'startDate' | 'endDate'
+  'genres' | 'publicationStatus' | 'startDate' | 'endDate' | 'sourceUrl'
 >
 
 type EntryDetailDrawerProps = {
@@ -86,7 +86,77 @@ function getOtherTitles(
 }
 
 function getExplorerSourceLabel(item: MetadataCard): string {
-  return item.id.startsWith('anilist:') ? 'AniList' : 'Unknown'
+  if (item.sourceUrl) {
+    try {
+      const host = new URL(item.sourceUrl).hostname
+      if (host.includes('mangadex.org')) {
+        return 'MangaDex'
+      }
+      if (host.includes('anilist.co')) {
+        return 'AniList'
+      }
+    } catch {
+      // fall through to id-based detection
+    }
+  }
+
+  if (item.id.startsWith('anilist:')) return 'AniList'
+  if (item.id.startsWith('mangadex:')) return 'MangaDex'
+  return 'Unknown'
+}
+
+function getExplorerSourceFavicon(item: MetadataCard): string | null {
+  if (item.sourceUrl) {
+    try {
+      const url = new URL(item.sourceUrl)
+      return `${url.origin}/favicon.ico`
+    } catch {
+      // fall through
+    }
+  }
+
+  if (item.id.startsWith('anilist:')) {
+    return 'https://anilist.co/favicon.ico'
+  }
+
+  if (item.id.startsWith('mangadex:')) {
+    return 'https://mangadex.org/favicon.ico'
+  }
+
+  return null
+}
+
+function getSourceFaviconFromUrl(sourceUrl?: string): string | null {
+  if (!sourceUrl) {
+    return null
+  }
+
+  try {
+    const url = new URL(sourceUrl)
+    return `${url.origin}/favicon.ico`
+  } catch {
+    return null
+  }
+}
+
+function getSourceLabelFromUrl(sourceUrl?: string): string {
+  if (!sourceUrl) {
+    return 'Unknown'
+  }
+
+  try {
+    const host = new URL(sourceUrl).hostname
+    if (host.includes('mangadex.org')) {
+      return 'MangaDex'
+    }
+    if (host.includes('anilist.co')) {
+      return 'AniList'
+    }
+  } catch {
+    return 'Unknown'
+  }
+
+  return 'Unknown'
 }
 
 function getTechnicalDateLabel(
@@ -251,7 +321,7 @@ export function EntryDetailDrawer({
             </div>
 
             <div className="field-card">
-              <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+              <p className="library-detail-kicker">{t('library.synopsis')}</p>
               <TranslatedDescription
                 className="library-detail-copy"
                 emptyFallback={t('library.noMetadataYet')}
@@ -380,6 +450,32 @@ export function EntryDetailDrawer({
                       : t('library.noMetadataYet')}
                   </strong>
                 </div>
+                {selectedEntryDetails?.sourceUrl ? (
+                  <div className="entry-technical-source">
+                    <span className="entry-technical-label">{t('library.metaSource')}</span>
+                    <strong className="entry-technical-source-body">
+                      <span className="entry-meta-source-badge">
+                        {getSourceFaviconFromUrl(selectedEntryDetails.sourceUrl) ? (
+                          <img
+                            className="entry-meta-source-favicon"
+                            src={getSourceFaviconFromUrl(selectedEntryDetails.sourceUrl) ?? undefined}
+                            alt=""
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        <span>{getSourceLabelFromUrl(selectedEntryDetails.sourceUrl)}</span>
+                      </span>
+                      <a
+                        className="entry-source-link"
+                        href={selectedEntryDetails.sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {t('library.openSource')}
+                      </a>
+                    </strong>
+                  </div>
+                ) : null}
                 <div>
                   <span className="entry-technical-label">{t('common.search')}</span>
                   <strong>{selectedEntry.activity.lastSource?.pageTitle ?? t('common.unknown')}</strong>
@@ -506,7 +602,7 @@ export function EntryDetailDrawer({
             ) : null}
 
             <div className="field-card">
-              <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
+              <p className="library-detail-kicker">{t('library.synopsis')}</p>
               <TranslatedDescription
                 className="library-detail-copy"
                 emptyFallback={t('library.noMetadataYet')}
@@ -552,15 +648,21 @@ export function EntryDetailDrawer({
                     })
                   : t('common.save')}
               </button>
+              {selectedExplorerItem.sourceUrl ? (
+                <a
+                  className="button secondary"
+                  href={selectedExplorerItem.sourceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {t('library.openSource')}
+                </a>
+              ) : null}
             </div>
 
             <div className="field-card entry-technical-block">
               <p className="library-detail-kicker">{t('library.entryTechnicalDetails')}</p>
               <div className="entry-technical-grid">
-                <div>
-                  <span className="entry-technical-label">{t('library.metaSource')}</span>
-                  <strong>{getExplorerSourceLabel(selectedExplorerItem)}</strong>
-                </div>
                 <div>
                   <span className="entry-technical-label">{t('library.publicationStatus')}</span>
                   <strong>
@@ -611,6 +713,32 @@ export function EntryDetailDrawer({
                     {selectedExplorerItem.runtime !== undefined
                       ? `${selectedExplorerItem.runtime} min`
                       : t('common.unknown')}
+                  </strong>
+                </div>
+                <div className="entry-technical-source">
+                  <span className="entry-technical-label">{t('library.metaSource')}</span>
+                  <strong className="entry-technical-source-body">
+                    <span className="entry-meta-source-badge">
+                      {getExplorerSourceFavicon(selectedExplorerItem) ? (
+                        <img
+                          className="entry-meta-source-favicon"
+                          src={getExplorerSourceFavicon(selectedExplorerItem) ?? undefined}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      <span>{getExplorerSourceLabel(selectedExplorerItem)}</span>
+                    </span>
+                    {selectedExplorerItem.sourceUrl ? (
+                      <a
+                        className="entry-source-link"
+                        href={selectedExplorerItem.sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {t('library.openSource')}
+                      </a>
+                    ) : null}
                   </strong>
                 </div>
               </div>

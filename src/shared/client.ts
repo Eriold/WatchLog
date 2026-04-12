@@ -93,6 +93,14 @@ export async function addFromExplorer(metadataId: string, listId: string) {
 export async function getMetadataForCatalogEntry(
   catalog: Pick<CatalogEntry, 'mediaType' | 'normalizedTitle' | 'externalIds'>,
 ) {
+  const mangaDexId = catalog.externalIds.mangadex
+  if (mangaDexId) {
+    const metadata = await metadataProvider.getById(`mangadex:${mangaDexId}`)
+    if (metadata) {
+      return metadata
+    }
+  }
+
   const aniListId = catalog.externalIds.anilist
 
   if (aniListId) {

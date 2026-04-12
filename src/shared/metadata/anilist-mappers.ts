@@ -170,6 +170,7 @@ export function mapAniListMediaToMetadataCard(media: AniListMedia): MetadataCard
     title,
     normalizedTitle: normalizeTitle(title),
     aliases: getAniListAliases(media, title),
+    sourceUrl: `https://anilist.co/${media.type === 'ANIME' ? 'anime' : 'manga'}/${media.id}`,
     seasonNumber: inferSeasonNumberFromTitles([
       media.title?.english?.trim(),
       media.title?.romaji?.trim(),

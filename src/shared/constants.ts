@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   detectionByTab: 'watchlog.detectionByTab',
   locale: 'watchlog.locale',
   anilistCache: 'watchlog.anilistCache',
+  mangadexCache: 'watchlog.mangadexCache',
   siteTitleAliases: 'watchlog.siteTitleAliases',
 } as const
 

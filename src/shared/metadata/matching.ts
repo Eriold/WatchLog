@@ -119,6 +119,12 @@ export function getMetadataExternalIds(item?: Pick<MetadataCard, 'id'> | null): 
     }
   }
 
+  if (item.id.startsWith('mangadex:')) {
+    return {
+      mangadex: item.id.slice('mangadex:'.length),
+    }
+  }
+
   return {}
 }
 
@@ -278,17 +284,20 @@ export function pickBestMetadataMatch(
             : itemSeasonNumber === undefined
               ? 0
               : -36
+      const prefersAnime = preferredMediaTypes.includes('anime')
+      const prefersMangaLike = preferredMediaTypes.some(
+        (mediaType) =>
+          mediaType === 'manga' ||
+          mediaType === 'manhwa' ||
+          mediaType === 'manhua' ||
+          mediaType === 'novel',
+      )
       const providerBias =
-        item.id.startsWith('anilist:') &&
-        preferredMediaTypes.some(
-          (mediaType) =>
-            mediaType === 'anime' ||
-            mediaType === 'manga' ||
-            mediaType === 'manhwa' ||
-            mediaType === 'manhua',
-        )
+        item.id.startsWith('anilist:') && prefersAnime
           ? 3
-          : 0
+          : item.id.startsWith('mangadex:') && prefersMangaLike
+            ? 4
+            : 0
 
       return {
         item,

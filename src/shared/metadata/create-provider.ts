@@ -3,9 +3,13 @@ import { ResolverMetadataProvider } from '../../domains/metadata/provider-adapte
 import { MetadataResolver } from '../../domains/metadata/resolver'
 import { MetadataSourceRegistry } from '../../domains/metadata/source-registry'
 import { AniListMetadataSource } from '../../integrations/metadata/anilist/source'
+import { MangaDexMetadataSource } from '../../integrations/metadata/mangadex/source'
 
 export function createMetadataProvider() {
-  const registry = new MetadataSourceRegistry([new AniListMetadataSource()])
+  const registry = new MetadataSourceRegistry([
+    new AniListMetadataSource(),
+    new MangaDexMetadataSource(),
+  ])
   const resolver = new MetadataResolver(registry, new SimpleMetadataMergePolicy())
 
   return new ResolverMetadataProvider(resolver)

@@ -137,6 +137,7 @@ export interface MetadataCard {
   title: string
   normalizedTitle: string
   aliases?: string[]
+  sourceUrl?: string
   seasonNumber?: number
   mediaType: MediaType
   poster?: string

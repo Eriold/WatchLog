@@ -192,6 +192,10 @@ function getExplorerSourceLabel(item: MetadataCard, t: ReturnType<typeof useI18n
     return 'AniList'
   }
 
+  if (item.id.startsWith('mangadex:')) {
+    return 'MangaDex'
+  }
+
   return t('library.mockCatalog')
 }
 
@@ -1229,7 +1233,7 @@ export function SidePanelApp() {
         })
 
         if (index < queue.length - 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 3000))
+          await new Promise((resolve) => window.setTimeout(resolve, 7000))
         }
       }
     } finally {
@@ -1513,6 +1517,18 @@ export function SidePanelApp() {
                       <div>
                         <h3 className="library-card-title">{item.title}</h3>
                         <p className="library-card-source">{getExplorerSourceLabel(item, t)}</p>
+                        {item.sourceUrl ? (
+                          <a
+                            className="library-card-source-link"
+                            href={item.sourceUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                            onClick={(event) => event.stopPropagation()}
+                            title={item.sourceUrl}
+                          >
+                            {t('library.openSource')}
+                          </a>
+                        ) : null}
                       </div>
                       <div className="genre-row">
                         {item.genres.slice(0, 3).map((genre) => (
