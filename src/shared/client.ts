@@ -14,6 +14,7 @@ import type {
   WatchLogMessage,
 } from './messages'
 import { createMetadataProvider } from './metadata/create-provider'
+import { getTranslatedTitleCandidates } from './metadata/title-translation'
 import { getDetectionSearchQueries } from './detection/title-candidates'
 import { getSiteTitleAliasCandidates } from './detection/site-title-aliases'
 import { LocalStorageProvider } from './storage/local-storage-provider'
@@ -53,7 +54,11 @@ export async function saveDetection(payload: SaveDetectionInput) {
 
 export async function resolveDetectionMetadata(detection: DetectionResult) {
   const siteAliases = await getSiteTitleAliasCandidates(detection.sourceSite, detection.title)
-  const queries = getDetectionSearchQueries(detection, siteAliases)
+  const translatedTitleCandidates = await getTranslatedTitleCandidates(detection.title)
+  const queries = getDetectionSearchQueries(detection, [
+    ...siteAliases,
+    ...translatedTitleCandidates,
+  ])
 
   if (detection.season !== undefined) {
     queries.push(`${detection.title} ${detection.season}`)
@@ -66,12 +71,19 @@ export async function resolveDetectionMetadata(detection: DetectionResult) {
   ])
 
   const items = results.flat()
-  const picked = pickBestMetadataMatch(
-    items,
-    detection.normalizedTitle,
-    getDetectionMediaTypeHints(detection),
-    getDetectionSeasonNumber(detection),
-  )
+  const preferredMediaTypes = getDetectionMediaTypeHints(detection)
+  const preferredSeason = getDetectionSeasonNumber(detection)
+  const titleCandidates = [detection.title, ...translatedTitleCandidates]
+  let picked = pickBestMetadataMatch(items, detection.normalizedTitle, preferredMediaTypes, preferredSeason)
+
+  if (!picked) {
+    for (const titleCandidate of titleCandidates) {
+      picked = pickBestMetadataMatch(items, titleCandidate, preferredMediaTypes, preferredSeason)
+      if (picked) {
+        break
+      }
+    }
+  }
 
   if (picked) {
     return picked

@@ -51,6 +51,9 @@ export const esPopupTranslations = {
   'popup.none': 'ninguno',
   'popup.catalogImportKicker': 'Importación de catálogo',
   'popup.catalogImportTitle': 'Recuperar lista',
+  'popup.catalogImportScanAction': 'Escanear y recuperar lista',
+  'popup.catalogImportScanHint':
+    'Escanea toda la grilla de esta página, cuenta los títulos y recupéralos como un paquete completo.',
   'popup.catalogImportSummary': 'Se detectaron {count} títulos en "{label}".',
   'popup.catalogImportMatchedList':
     'Ya existe una lista local compatible. Todo se agrupará en {label} a menos que elijas otro destino.',

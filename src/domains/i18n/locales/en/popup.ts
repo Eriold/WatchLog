@@ -48,6 +48,8 @@ export const enPopupTranslations = {
   'popup.none': 'none',
   'popup.catalogImportKicker': 'Catalog import',
   'popup.catalogImportTitle': 'Recover list',
+  'popup.catalogImportScanAction': 'Scan and recover list',
+  'popup.catalogImportScanHint': 'Scan the full grid on this page, count the titles, and recover them as one package.',
   'popup.catalogImportSummary': 'Detected {count} titles in "{label}".',
   'popup.catalogImportMatchedList':
     'A local list already matches. Everything will be grouped in {label} unless you choose another destination.',

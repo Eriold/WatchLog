@@ -7,11 +7,14 @@ import {
   saveDetection,
 } from '../shared/client'
 import {
+  extractOlympusBibliotecaCatalogSnapshot,
+  isOlympusBibliotecaCatalogPage,
+} from '../shared/catalog-import/olympusbiblioteca'
+import {
   extractZonaTmoCatalogSnapshot,
   isZonaTmoCatalogPage,
-  type ZonaTmoCatalogImportItem,
-  type ZonaTmoCatalogSnapshot,
 } from '../shared/catalog-import/zonatmo'
+import type { CatalogImportItem, CatalogImportSnapshot } from '../shared/catalog-import/types'
 import { STORAGE_KEYS, SYSTEM_LISTS } from '../shared/constants'
 import {
   findMatchingLibraryEntry,
@@ -352,7 +355,7 @@ function findExistingListByLabel(
 }
 
 function buildCatalogImportDetection(
-  item: ZonaTmoCatalogImportItem,
+  item: CatalogImportItem,
   sourceSite: string,
   listMediaType?: MediaType,
 ): DetectionResult {
@@ -369,7 +372,7 @@ function buildCatalogImportDetection(
   }
 }
 
-function inferCatalogListMediaType(items: ZonaTmoCatalogImportItem[]): MediaType | undefined {
+function inferCatalogListMediaType(items: CatalogImportItem[]): MediaType | undefined {
   const counts = new Map<MediaType, number>()
 
   for (const item of items) {
@@ -840,14 +843,29 @@ async function runPopupPosterProbe(tabId: number): Promise<PopupPosterCandidate[
   }
 }
 
-async function runZonaTmoCatalogProbe(tabId: number): Promise<ZonaTmoCatalogSnapshot | null> {
+async function runZonaTmoCatalogProbe(tabId: number): Promise<CatalogImportSnapshot | null> {
   try {
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: extractZonaTmoCatalogSnapshot,
     })
 
-    return (result?.result as ZonaTmoCatalogSnapshot | null | undefined) ?? null
+    return (result?.result as CatalogImportSnapshot | null | undefined) ?? null
+  } catch {
+    return null
+  }
+}
+
+async function runOlympusBibliotecaCatalogProbe(
+  tabId: number,
+): Promise<CatalogImportSnapshot | null> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractOlympusBibliotecaCatalogSnapshot,
+    })
+
+    return (result?.result as CatalogImportSnapshot | null | undefined) ?? null
   } catch {
     return null
   }
@@ -879,13 +897,14 @@ export function PopupApp() {
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle')
   const [analyzing, setAnalyzing] = useState(false)
   const [catalogImportBusy, setCatalogImportBusy] = useState(false)
+  const [catalogImportScanBusy, setCatalogImportScanBusy] = useState(false)
   const [targetTabId, setTargetTabId] = useState<number | null>(null)
   const [targetTabUrl, setTargetTabUrl] = useState<string | null>(null)
   const [capturePoster, setCapturePoster] = useState(() => getRandomTemporaryPoster())
   const [posterCandidates, setPosterCandidates] = useState<PopupPosterCandidate[]>([])
   const [selectedPosterUrl, setSelectedPosterUrl] = useState<string | null>(null)
   const [syncedDetectionSignature, setSyncedDetectionSignature] = useState<string | null>(null)
-  const [catalogImportSnapshot, setCatalogImportSnapshot] = useState<ZonaTmoCatalogSnapshot | null>(null)
+  const [catalogImportSnapshot, setCatalogImportSnapshot] = useState<CatalogImportSnapshot | null>(null)
   const [catalogImportTarget, setCatalogImportTarget] = useState<string>(CREATE_NEW_LIST_OPTION)
   const [catalogImportNewListLabel, setCatalogImportNewListLabel] = useState('')
   const [catalogImportMergeConfirmed, setCatalogImportMergeConfirmed] = useState(false)
@@ -1065,8 +1084,13 @@ export function PopupApp() {
 
   useEffect(() => {
     let cancelled = false
+    const currentTabUrl = targetTabUrl ?? ''
 
-    if (targetTabId === null || !targetTabUrl || !isZonaTmoCatalogPage(targetTabUrl)) {
+    const isCatalogPage =
+      targetTabUrl !== null &&
+      (isZonaTmoCatalogPage(currentTabUrl) || isOlympusBibliotecaCatalogPage(currentTabUrl))
+
+    if (targetTabId === null || !isCatalogPage) {
       setCatalogImportSnapshot(null)
       setCatalogImportProgress(null)
       return () => {
@@ -1074,7 +1098,11 @@ export function PopupApp() {
       }
     }
 
-    void runZonaTmoCatalogProbe(targetTabId).then((result) => {
+    const probe = isZonaTmoCatalogPage(currentTabUrl)
+      ? runZonaTmoCatalogProbe(targetTabId)
+      : runOlympusBibliotecaCatalogProbe(targetTabId)
+
+    void probe.then((result) => {
       if (cancelled) {
         return
       }
@@ -1496,13 +1524,20 @@ export function PopupApp() {
     }
   }
 
-  async function handleRecoverCatalog(): Promise<void> {
-    if (!catalogImportSnapshot || catalogImportSnapshot.items.length === 0) {
+  async function importCatalogSnapshot(snapshotToRecover: CatalogImportSnapshot): Promise<void> {
+    if (snapshotToRecover.items.length === 0) {
+      console.warn('[WatchLog][CatalogImport] Empty snapshot, nothing to recover', snapshotToRecover)
       return
     }
 
-    const total = catalogImportSnapshot.items.length
-    const listMediaType = inferCatalogListMediaType(catalogImportSnapshot.items)
+    const total = snapshotToRecover.items.length
+    const listMediaType = inferCatalogListMediaType(snapshotToRecover.items)
+    console.info('[WatchLog][CatalogImport] Import start', {
+      sourceSite: snapshotToRecover.sourceSite,
+      listLabel: snapshotToRecover.listLabel,
+      total,
+      inferredMediaType: listMediaType,
+    })
     setCatalogImportBusy(true)
     setCatalogImportCompletedTarget(null)
     setCatalogImportProgress({
@@ -1513,6 +1548,7 @@ export function PopupApp() {
 
     try {
       const destination = await resolveCatalogImportList()
+      console.info('[WatchLog][CatalogImport] Destination resolved', destination)
       let latestSnapshot = snapshot
       const importSummary = {
         created: 0,
@@ -1521,11 +1557,19 @@ export function PopupApp() {
         omitted: 0,
       }
 
-      for (let index = 0; index < catalogImportSnapshot.items.length; index += 1) {
-        const item = catalogImportSnapshot.items[index]
+      for (let index = 0; index < snapshotToRecover.items.length; index += 1) {
+        const item = snapshotToRecover.items[index]
+        console.debug('[WatchLog][CatalogImport] Inspecting item', {
+          index: index + 1,
+          total,
+          title: item.title,
+          normalizedTitle: item.normalizedTitle,
+          sourceUrl: item.sourceUrl,
+          mediaType: item.mediaType,
+        })
         const detection = buildCatalogImportDetection(
           item,
-          catalogImportSnapshot.sourceSite,
+          snapshotToRecover.sourceSite,
           listMediaType,
         )
         const existingWithSameType = toLibraryEntries(latestSnapshot).find((entry) => {
@@ -1537,6 +1581,10 @@ export function PopupApp() {
 
         if (existingWithSameType?.activity.status === destination.listId) {
           importSummary.omitted += 1
+          console.debug('[WatchLog][CatalogImport] Omitted already saved item', {
+            title: item.title,
+            destination: destination.listId,
+          })
           setCatalogImportProgress({
             stage: 'queueing',
             processed: index + 1,
@@ -1563,6 +1611,11 @@ export function PopupApp() {
           metadataSyncStatus: 'pending',
           skipMetadataLookup: true,
           disableTemporaryPoster: true,
+        })
+        console.debug('[WatchLog][CatalogImport] Saved item', {
+          title: item.title,
+          before: previousCatalogCount,
+          after: response.snapshot.catalog.length,
         })
 
         if (response.snapshot.catalog.length > previousCatalogCount) {
@@ -1595,7 +1648,12 @@ export function PopupApp() {
         label: destination.label,
         summary: importSummary,
       })
+      console.info('[WatchLog][CatalogImport] Import done', {
+        destination,
+        summary: importSummary,
+      })
     } catch (error) {
+      console.error('[WatchLog][CatalogImport] Import failed', error)
       setCatalogImportProgress({
         stage: 'error',
         processed: 0,
@@ -1604,6 +1662,61 @@ export function PopupApp() {
       })
     } finally {
       setCatalogImportBusy(false)
+    }
+  }
+
+  async function handleRecoverCatalog(): Promise<void> {
+    if (!catalogImportSnapshot) {
+      return
+    }
+
+    await importCatalogSnapshot(catalogImportSnapshot)
+  }
+
+  async function handleScanAndRecoverOlympusCatalog(): Promise<void> {
+    if (targetTabId === null) {
+      console.warn('[WatchLog][Olympus] Scan requested without active tab id')
+      return
+    }
+
+    console.info('[WatchLog][Olympus] Scan start', {
+      tabId: targetTabId,
+      tabUrl: targetTabUrl,
+    })
+    setCatalogImportScanBusy(true)
+    setCatalogImportBusy(true)
+    setCatalogImportProgress({
+      stage: 'queueing',
+      processed: 0,
+      total: 0,
+      label: t('popup.catalogImportTitle'),
+    })
+
+    try {
+      const snapshotFromPage = await runOlympusBibliotecaCatalogProbe(targetTabId)
+      console.info('[WatchLog][Olympus] Scan probe result', {
+        found: snapshotFromPage?.items.length ?? 0,
+        listLabel: snapshotFromPage?.listLabel ?? null,
+        sourceUrl: snapshotFromPage?.sourceUrl ?? null,
+      })
+      if (!snapshotFromPage || snapshotFromPage.items.length === 0) {
+        console.warn('[WatchLog][Olympus] No recoverable items found')
+        throw new Error('No se encontró contenido recuperable en Olympus Biblioteca.')
+      }
+
+      setCatalogImportSnapshot(snapshotFromPage)
+      await importCatalogSnapshot(snapshotFromPage)
+    } catch (error) {
+      console.error('[WatchLog][Olympus] Scan failed', error)
+      setCatalogImportProgress({
+        stage: 'error',
+        processed: 0,
+        total: 0,
+        reason: error instanceof Error ? error.message : 'olympus-catalog-scan-failed',
+      })
+    } finally {
+      setCatalogImportBusy(false)
+      setCatalogImportScanBusy(false)
     }
   }
 
@@ -1686,6 +1799,8 @@ export function PopupApp() {
     !catalogImportBusy &&
     (!catalogImportNeedsNewListName || Boolean(catalogImportNewListLabel.trim())) &&
     (!catalogImportDuplicateList || catalogImportMergeConfirmed)
+  const isOlympusCatalogPage =
+    targetTabUrl !== null && isOlympusBibliotecaCatalogPage(targetTabUrl)
   const catalogImportButtonLabel =
     catalogImportCompletedTarget && catalogImportProgress?.stage === 'done'
       ? t('popup.catalogImportOpenRecovered')
@@ -2109,97 +2224,125 @@ export function PopupApp() {
           </section>
         )}
 
-        {catalogImportSnapshot ? (
+        {catalogImportSnapshot || isOlympusCatalogPage ? (
           <section className="popup-hero popup-import-section">
             <div className="popup-heading-row">
               <div>
                 <p className="eyebrow">{t('popup.catalogImportKicker')}</p>
                 <h2 className="section-title popup-import-title">{t('popup.catalogImportTitle')}</h2>
               </div>
-              <span className="section-chip">{catalogImportCount}</span>
+              <span className="section-chip">
+                {catalogImportSnapshot ? catalogImportCount : t('popup.noSignal')}
+              </span>
             </div>
 
             <div className="catalog-import-card">
-              <div className="catalog-import-copy">
-                <strong className="catalog-import-list-label">{catalogImportSnapshot.listLabel}</strong>
-                <p className="muted popup-message">{catalogImportStatusMessage}</p>
-                <p className="tiny catalog-import-hint">{catalogImportHintMessage}</p>
-              </div>
-
-              <div className="popup-section">
-                <label className="label popup-compact-label">
-                  {t('popup.catalogImportTargetLabel')}
-                </label>
-                <CustomSelect
-                  value={catalogImportTarget}
-                  disabled={catalogImportBusy}
-                  onChange={setCatalogImportTarget}
-                  options={[
-                    {
-                      value: CREATE_NEW_LIST_OPTION,
-                      label: t('popup.catalogImportCreateOption'),
-                    },
-                    ...availableLists.map((list) => ({
-                      value: list.id,
-                      label: getLocalizedListDefinitionLabel(list, t),
-                    })),
-                  ]}
-                />
-              </div>
-
-              {catalogImportNeedsNewListName ? (
-                <div className="popup-section">
-                  <label className="label popup-compact-label" htmlFor="catalog-import-new-list">
-                    {t('popup.catalogImportNewListLabel')}
-                  </label>
-                  <input
-                    id="catalog-import-new-list"
-                    className="field"
-                    value={catalogImportNewListLabel}
-                    disabled={catalogImportBusy}
-                    placeholder={t('popup.catalogImportNewListPlaceholder')}
-                    onChange={(event) => setCatalogImportNewListLabel(event.target.value)}
-                  />
+              {!catalogImportSnapshot && isOlympusCatalogPage ? (
+                <div className="catalog-import-scan-callout">
+                  <strong className="catalog-import-list-label">Olympus Biblioteca</strong>
+                  <p className="tiny catalog-import-hint">{t('popup.catalogImportScanHint')}</p>
+                  <div className="popup-footer popup-primary-actions">
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={catalogImportScanBusy}
+                      onClick={() => void handleScanAndRecoverOlympusCatalog()}
+                    >
+                      {catalogImportScanBusy
+                        ? t('popup.reanalyzing')
+                        : t('popup.catalogImportScanAction')}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
-              {catalogImportDuplicateList ? (
-                <label className="catalog-import-confirm">
-                  <input
-                    type="checkbox"
-                    checked={catalogImportMergeConfirmed}
-                    disabled={catalogImportBusy}
-                    onChange={(event) => setCatalogImportMergeConfirmed(event.target.checked)}
-                  />
-                  <span>{t('popup.catalogImportConfirmMerge')}</span>
-                </label>
-              ) : null}
+              {catalogImportSnapshot ? (
+                <>
+                  <div className="catalog-import-copy">
+                    <strong className="catalog-import-list-label">{catalogImportSnapshot.listLabel}</strong>
+                    <p className="muted popup-message">{catalogImportStatusMessage}</p>
+                    <p className="tiny catalog-import-hint">{catalogImportHintMessage}</p>
+                  </div>
 
-              {catalogImportPreviewItems.length > 0 ? (
-                <div className="catalog-import-preview">
-                  {catalogImportPreviewItems.map((item) => (
-                    <span key={`${item.sourceId}:${item.title}`} className="popup-title-alias-chip">
-                      {item.title}
-                    </span>
-                  ))}
-                  {catalogImportSnapshot.items.length > catalogImportPreviewItems.length ? (
-                    <span className="popup-title-alias-chip">
-                      {t('popup.catalogImportMore', {
-                        count: catalogImportSnapshot.items.length - catalogImportPreviewItems.length,
-                      })}
-                    </span>
+                  <div className="popup-section">
+                    <label className="label popup-compact-label">
+                      {t('popup.catalogImportTargetLabel')}
+                    </label>
+                    <CustomSelect
+                      value={catalogImportTarget}
+                      disabled={catalogImportBusy}
+                      onChange={setCatalogImportTarget}
+                      options={[
+                        {
+                          value: CREATE_NEW_LIST_OPTION,
+                          label: t('popup.catalogImportCreateOption'),
+                        },
+                        ...availableLists.map((list) => ({
+                          value: list.id,
+                          label: getLocalizedListDefinitionLabel(list, t),
+                        })),
+                      ]}
+                    />
+                  </div>
+
+                  {catalogImportNeedsNewListName ? (
+                    <div className="popup-section">
+                      <label className="label popup-compact-label" htmlFor="catalog-import-new-list">
+                        {t('popup.catalogImportNewListLabel')}
+                      </label>
+                      <input
+                        id="catalog-import-new-list"
+                        className="field"
+                        value={catalogImportNewListLabel}
+                        disabled={catalogImportBusy}
+                        placeholder={t('popup.catalogImportNewListPlaceholder')}
+                        onChange={(event) => setCatalogImportNewListLabel(event.target.value)}
+                      />
+                    </div>
                   ) : null}
-                </div>
-              ) : null}
 
-              <button
-                className="button catalog-import-button"
-                type="button"
-                disabled={!catalogImportCanRun && !(catalogImportCompletedTarget && catalogImportProgress?.stage === 'done')}
-                onClick={() => void handleCatalogImportAction()}
-              >
-                {catalogImportButtonLabel}
-              </button>
+                  {catalogImportDuplicateList ? (
+                    <label className="catalog-import-confirm">
+                      <input
+                        type="checkbox"
+                        checked={catalogImportMergeConfirmed}
+                        disabled={catalogImportBusy}
+                        onChange={(event) => setCatalogImportMergeConfirmed(event.target.checked)}
+                      />
+                      <span>{t('popup.catalogImportConfirmMerge')}</span>
+                    </label>
+                  ) : null}
+
+                  {catalogImportPreviewItems.length > 0 ? (
+                    <div className="catalog-import-preview">
+                      {catalogImportPreviewItems.map((item) => (
+                        <span key={`${item.sourceId}:${item.title}`} className="popup-title-alias-chip">
+                          {item.title}
+                        </span>
+                      ))}
+                      {catalogImportSnapshot.items.length > catalogImportPreviewItems.length ? (
+                        <span className="popup-title-alias-chip">
+                          {t('popup.catalogImportMore', {
+                            count: catalogImportSnapshot.items.length - catalogImportPreviewItems.length,
+                          })}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                <button
+                  className="button catalog-import-button"
+                  type="button"
+                  disabled={
+                    !catalogImportCanRun &&
+                    !(catalogImportCompletedTarget && catalogImportProgress?.stage === 'done')
+                  }
+                  onClick={() => void handleCatalogImportAction()}
+                >
+                  {catalogImportButtonLabel}
+                </button>
+                </>
+              ) : null}
             </div>
           </section>
         ) : null}

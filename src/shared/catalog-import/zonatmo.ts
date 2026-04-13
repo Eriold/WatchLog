@@ -1,28 +1,5 @@
+import type { CatalogImportItem, CatalogImportSnapshot } from './types'
 import type { MediaType } from '../types'
-
-export interface ZonaTmoCatalogImportItem {
-  sourceId: string
-  title: string
-  normalizedTitle: string
-  sourceUrl: string
-  posterUrl?: string
-  mediaType: MediaType
-  sourceTypeLabel?: string
-  tags: string[]
-  score?: number
-}
-
-export interface ZonaTmoCatalogSnapshot {
-  sourceSite: string
-  sourceUrl: string
-  listId: string | null
-  listSlug: string | null
-  listLabel: string
-  visibleCount: number
-  reportedCount?: number
-  maxCount?: number
-  items: ZonaTmoCatalogImportItem[]
-}
 
 function parseZonaTmoListUrl(href: string): {
   sourceSite: string
@@ -57,7 +34,7 @@ export function isZonaTmoCatalogPage(href: string): boolean {
 export function extractZonaTmoCatalogSnapshot(
   documentArg: Document = document,
   hrefArg: string = window.location.href,
-): ZonaTmoCatalogSnapshot | null {
+): CatalogImportSnapshot | null {
   const parseListPage = (href: string) => {
     try {
       const url = new URL(href)
@@ -186,7 +163,7 @@ export function extractZonaTmoCatalogSnapshot(
   }
 
   const seen = new Set<string>()
-  const items: ZonaTmoCatalogImportItem[] = []
+  const items: CatalogImportItem[] = []
 
   for (const element of Array.from(documentArg.querySelectorAll('.element[data-identifier]'))) {
     const sourceId = compactText(element.getAttribute('data-identifier'))
@@ -217,7 +194,7 @@ export function extractZonaTmoCatalogSnapshot(
 
     seen.add(dedupeKey)
 
-    const item: ZonaTmoCatalogImportItem = {
+    const item: CatalogImportItem = {
       sourceId,
       title,
       normalizedTitle,
