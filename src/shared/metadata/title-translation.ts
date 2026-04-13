@@ -32,6 +32,7 @@ const chromeAiGlobal = globalThis as typeof globalThis & {
 
 const titleTranslationCache = new Map<string, Promise<string[]>>()
 const translatorSessionCache = new Map<string, Promise<ChromeTranslatorSession | null>>()
+const TITLE_TRANSLATION_LOG_PREFIX = '[WatchLog][TitleTranslation]'
 
 function normalizeLanguageTag(value?: string | null): string {
   return value?.trim().toLowerCase().split('-')[0] ?? ''
@@ -121,18 +122,42 @@ async function translateText(text: string, targetLanguage: string): Promise<stri
 
   const sourceLanguage = inferFallbackSourceLanguage(trimmed)
   if (!sourceLanguage || sourceLanguage === normalizedTarget) {
+    console.info(`${TITLE_TRANSLATION_LOG_PREFIX} Skip translate`, {
+      text: trimmed,
+      sourceLanguage,
+      targetLanguage: normalizedTarget,
+      reason: 'source-language-equals-target-or-missing',
+    })
     return null
   }
 
   const translator = await getTranslatorSession(sourceLanguage, normalizedTarget)
   if (!translator) {
+    console.warn(`${TITLE_TRANSLATION_LOG_PREFIX} Translator unavailable`, {
+      text: trimmed,
+      sourceLanguage,
+      targetLanguage: normalizedTarget,
+    })
     return null
   }
 
   try {
     const translatedText = (await translator.translate(trimmed)).trim()
-    return translatedText && translatedText !== trimmed ? translatedText : null
-  } catch {
+    const nextValue = translatedText && translatedText !== trimmed ? translatedText : null
+    console.info(`${TITLE_TRANSLATION_LOG_PREFIX} Translation result`, {
+      text: trimmed,
+      sourceLanguage,
+      targetLanguage: normalizedTarget,
+      translatedText: nextValue,
+    })
+    return nextValue
+  } catch (error) {
+    console.error(`${TITLE_TRANSLATION_LOG_PREFIX} Translation failed`, {
+      text: trimmed,
+      sourceLanguage,
+      targetLanguage: normalizedTarget,
+      error,
+    })
     return null
   }
 }
@@ -145,6 +170,7 @@ export async function getTranslatedTitleCandidates(title: string): Promise<strin
 
   const cached = titleTranslationCache.get(trimmed)
   if (cached) {
+    console.info(`${TITLE_TRANSLATION_LOG_PREFIX} Cache hit`, { title: trimmed })
     return cached
   }
 

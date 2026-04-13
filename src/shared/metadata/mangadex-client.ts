@@ -229,42 +229,42 @@ export class MangaDexClient {
     )
     const mangas = Array.isArray(data.data) ? data.data : []
 
-    const items = await Promise.all(
-      mangas.map(async (manga) => {
-        const title = pickLocalizedString(manga.attributes.title) ?? `MangaDex ${manga.id}`
-        const aliases = [
-          ...(manga.attributes.altTitles ?? [])
-            .map((entry) => pickLocalizedString(entry))
-            .filter((entry): entry is string => Boolean(entry)),
-          ...Object.values(manga.attributes.title ?? {})
-            .map((value) => value?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ]
-        const coverArt = manga.relationships?.find((relationship) => relationship.type === 'cover_art')
-        const score = await this.getStatistics(manga.id)
-        const mediaType = mapOriginalLanguageToMediaType(manga.attributes.originalLanguage)
-        const sourceUrl = `https://mangadex.org/title/${manga.id}`
+    const items: MetadataCard[] = []
 
-        return {
-          id: `mangadex:${manga.id}`,
-          title,
-          normalizedTitle: normalizeTitle(title),
-          aliases: Array.from(new Set(aliases.filter((value) => value !== title))),
-          sourceUrl,
-          mediaType,
-          poster: buildCoverUrl(manga.id, coverArt?.attributes?.fileName),
-          genres: [],
-          description: pickDescription(manga.attributes.description),
-          publicationStatus: mapStatus(manga.attributes.status),
-          releaseYear: manga.attributes.year ?? undefined,
-          chapterCount:
-            manga.attributes.lastChapter && !Number.isNaN(Number(manga.attributes.lastChapter))
-              ? Number(manga.attributes.lastChapter)
-              : undefined,
-          score,
-        } satisfies MetadataCard
-      }),
-    )
+    for (const manga of mangas) {
+      const title = pickLocalizedString(manga.attributes.title) ?? `MangaDex ${manga.id}`
+      const aliases = [
+        ...(manga.attributes.altTitles ?? [])
+          .map((entry) => pickLocalizedString(entry))
+          .filter((entry): entry is string => Boolean(entry)),
+        ...Object.values(manga.attributes.title ?? {})
+          .map((value) => value?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ]
+      const coverArt = manga.relationships?.find((relationship) => relationship.type === 'cover_art')
+      const score = await this.getStatistics(manga.id)
+      const mediaType = mapOriginalLanguageToMediaType(manga.attributes.originalLanguage)
+      const sourceUrl = `https://mangadex.org/title/${manga.id}`
+
+      items.push({
+        id: `mangadex:${manga.id}`,
+        title,
+        normalizedTitle: normalizeTitle(title),
+        aliases: Array.from(new Set(aliases.filter((value) => value !== title))),
+        sourceUrl,
+        mediaType,
+        poster: buildCoverUrl(manga.id, coverArt?.attributes?.fileName),
+        genres: [],
+        description: pickDescription(manga.attributes.description),
+        publicationStatus: mapStatus(manga.attributes.status),
+        releaseYear: manga.attributes.year ?? undefined,
+        chapterCount:
+          manga.attributes.lastChapter && !Number.isNaN(Number(manga.attributes.lastChapter))
+            ? Number(manga.attributes.lastChapter)
+            : undefined,
+        score,
+      } satisfies MetadataCard)
+    }
 
     await this.writeCache(cacheKey, items, SEARCH_TTL_MS)
     for (const item of items) {

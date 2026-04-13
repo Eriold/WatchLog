@@ -14,8 +14,8 @@ import type {
   WatchLogMessage,
 } from './messages'
 import { createMetadataProvider } from './metadata/create-provider'
+import { AniListMetadataProvider } from './metadata/anilist-provider'
 import { getTranslatedTitleCandidates } from './metadata/title-translation'
-import { getDetectionSearchQueries } from './detection/title-candidates'
 import { getSiteTitleAliasCandidates } from './detection/site-title-aliases'
 import { LocalStorageProvider } from './storage/local-storage-provider'
 import { WatchLogRepository } from './storage/repository'
@@ -27,12 +27,175 @@ import type {
   SaveDetectionInput,
   UpdateEntryInput,
 } from './types'
-import { getDetectionMediaTypeHints, pickBestMetadataMatch } from './metadata/matching'
+import {
+  areMediaTypesCompatible,
+  getDetectionMediaTypeHints,
+  pickBestMetadataMatch,
+} from './metadata/matching'
 import { getDetectionSeasonNumber } from './season'
 import { sendRuntimeMessage } from './storage/browser'
+import { normalizeTitle } from './utils/normalize'
 
 const metadataProvider = createMetadataProvider()
+const aniListMetadataProvider = new AniListMetadataProvider()
 const repository = new WatchLogRepository(new LocalStorageProvider(), metadataProvider)
+const ANILIST_REFRESH_LOG_PREFIX = '[WatchLog][AniListRefresh]'
+
+function getAniListSearchType(mediaType: DetectionResult['mediaType']) {
+  if (mediaType === 'anime') {
+    return 'ANIME' as const
+  }
+
+  if (['manga', 'manhwa', 'manhua'].includes(mediaType)) {
+    return 'MANGA' as const
+  }
+
+  return null
+}
+
+async function resolveAniListMetadata(detection: DetectionResult) {
+  const searchType = getAniListSearchType(detection.mediaType)
+  if (!searchType) {
+    console.warn(`${ANILIST_REFRESH_LOG_PREFIX} Unsupported media type`, {
+      title: detection.title,
+      mediaType: detection.mediaType,
+    })
+    return undefined
+  }
+
+  console.info(`${ANILIST_REFRESH_LOG_PREFIX} Resolve start`, {
+    title: detection.title,
+    normalizedTitle: detection.normalizedTitle,
+    mediaType: detection.mediaType,
+    searchType,
+    sourceSite: detection.sourceSite,
+  })
+
+  const translatedTitleCandidates = await getTranslatedTitleCandidates(detection.title)
+  const englishTitleCandidates = translatedTitleCandidates.filter(
+    (candidate) => normalizeTitle(candidate) !== detection.normalizedTitle,
+  )
+  const orderedTitleSeeds = [detection.title, ...englishTitleCandidates]
+  const translatedQueryKeys = new Set(
+    englishTitleCandidates.map((candidate) => normalizeTitle(candidate)).filter(Boolean),
+  )
+
+  const queries: string[] = []
+  const seenQueries = new Set<string>()
+  const addQuery = (value: string | undefined | null) => {
+    const trimmed = value?.trim()
+    const normalized = trimmed ? normalizeTitle(trimmed) : ''
+    if (!trimmed || !normalized || seenQueries.has(normalized)) {
+      return
+    }
+
+    seenQueries.add(normalized)
+    queries.push(trimmed)
+  }
+
+  for (const titleCandidate of orderedTitleSeeds) {
+    addQuery(titleCandidate)
+  }
+
+  addQuery(detection.normalizedTitle)
+  addQuery(normalizeTitle(detection.title))
+
+  if (detection.season !== undefined) {
+    addQuery(`${detection.title} ${detection.season}`)
+    addQuery(`${detection.title} season ${detection.season}`)
+  }
+
+  console.info(`${ANILIST_REFRESH_LOG_PREFIX} Query plan`, {
+    title: detection.title,
+    translatedTitleCandidates,
+    queries,
+  })
+
+  const preferredMediaTypes =
+    searchType === 'ANIME' ? (['anime'] as const) : (['manga', 'manhwa', 'manhua'] as const)
+  const preferredSeason = getDetectionSeasonNumber(detection)
+
+  for (const query of queries) {
+    console.info(`${ANILIST_REFRESH_LOG_PREFIX} Query start`, {
+      title: detection.title,
+      searchType,
+      query,
+    })
+    const items = await aniListMetadataProvider.searchByType(query, searchType, {
+      bypassCache: true,
+    })
+    console.info(`${ANILIST_REFRESH_LOG_PREFIX} Query results`, {
+      title: detection.title,
+      searchType,
+      query,
+      results: items.length,
+      ids: items.map((item) => item.id),
+      titles: items.map((item) => item.title),
+    })
+    if (items.length === 0) {
+      continue
+    }
+
+    const titleCandidates = [detection.title, ...translatedTitleCandidates, query]
+    for (const titleCandidate of titleCandidates) {
+      const picked = pickBestMetadataMatch(
+        items,
+        titleCandidate,
+        [...preferredMediaTypes],
+        preferredSeason,
+      )
+      if (picked) {
+        console.info(`${ANILIST_REFRESH_LOG_PREFIX} Match selected`, {
+          title: detection.title,
+          query,
+          titleCandidate,
+          pickedId: picked.id,
+          pickedTitle: picked.title,
+          pickedSourceUrl: picked.sourceUrl,
+        })
+        return picked
+      }
+    }
+
+    if (translatedQueryKeys.has(normalizeTitle(query))) {
+      const rankedFallback =
+        items.find((item) =>
+          areMediaTypesCompatible(item.mediaType, detection.mediaType),
+        ) ?? items[0]
+
+      if (rankedFallback) {
+        console.warn(`${ANILIST_REFRESH_LOG_PREFIX} Using AniList ranked fallback`, {
+          title: detection.title,
+          query,
+          pickedId: rankedFallback.id,
+          pickedTitle: rankedFallback.title,
+          pickedSourceUrl: rankedFallback.sourceUrl,
+        })
+        return rankedFallback
+      }
+    }
+  }
+
+  console.info(`${ANILIST_REFRESH_LOG_PREFIX} Fallback normalized-title lookup`, {
+    title: detection.title,
+    normalizedTitle: detection.normalizedTitle,
+    searchType,
+  })
+  const fallback = await aniListMetadataProvider.findByNormalizedTitleForType(
+    detection.normalizedTitle,
+    searchType,
+    {
+      bypassCache: true,
+    },
+  )
+  console.info(`${ANILIST_REFRESH_LOG_PREFIX} Fallback result`, {
+    title: detection.title,
+    pickedId: fallback?.id ?? null,
+    pickedTitle: fallback?.title ?? null,
+    pickedSourceUrl: fallback?.sourceUrl ?? null,
+  })
+  return fallback
+}
 
 export async function getActiveDetection(tabId?: number) {
   return sendRuntimeMessage<ActiveDetectionResponse>({
@@ -53,43 +216,71 @@ export async function saveDetection(payload: SaveDetectionInput) {
 }
 
 export async function resolveDetectionMetadata(detection: DetectionResult) {
+  const preferTranslatedSearch = /olympusbiblioteca\.com/i.test(detection.sourceSite)
   const siteAliases = await getSiteTitleAliasCandidates(detection.sourceSite, detection.title)
   const translatedTitleCandidates = await getTranslatedTitleCandidates(detection.title)
-  const queries = getDetectionSearchQueries(detection, [
-    ...siteAliases,
-    ...translatedTitleCandidates,
-  ])
+  const englishTitleCandidates = translatedTitleCandidates.filter(
+    (candidate) => normalizeTitle(candidate) !== detection.normalizedTitle,
+  )
+  const orderedTitleSeeds = preferTranslatedSearch
+    ? [...englishTitleCandidates, ...siteAliases, detection.title]
+    : [detection.title, ...englishTitleCandidates, ...siteAliases]
+
+  const queries: string[] = []
+  const seenQueries = new Set<string>()
+  const addQuery = (value: string | undefined | null) => {
+    const trimmed = value?.trim()
+    const normalized = trimmed ? normalizeTitle(trimmed) : ''
+    if (!trimmed || !normalized || seenQueries.has(normalized)) {
+      return
+    }
+
+    seenQueries.add(normalized)
+    queries.push(trimmed)
+  }
+
+  for (const titleCandidate of orderedTitleSeeds) {
+    addQuery(titleCandidate)
+    addQuery(normalizeTitle(titleCandidate))
+  }
+
+  addQuery(detection.normalizedTitle)
+  addQuery(normalizeTitle(detection.title))
 
   if (detection.season !== undefined) {
     queries.push(`${detection.title} ${detection.season}`)
     queries.push(`${detection.title} season ${detection.season}`)
   }
 
-  const [results, normalizedMatch] = await Promise.all([
-    Promise.all(queries.map((query) => metadataProvider.search(query))),
-    metadataProvider.findByNormalizedTitle(detection.normalizedTitle),
-  ])
-
-  const items = results.flat()
   const preferredMediaTypes = getDetectionMediaTypeHints(detection)
   const preferredSeason = getDetectionSeasonNumber(detection)
-  const titleCandidates = [detection.title, ...translatedTitleCandidates]
-  let picked = pickBestMetadataMatch(items, detection.normalizedTitle, preferredMediaTypes, preferredSeason)
 
-  if (!picked) {
+  for (const query of queries) {
+    const items = await metadataProvider.search(query)
+    if (items.length === 0) {
+      continue
+    }
+
+    const titleCandidates = [detection.title, ...translatedTitleCandidates, query]
     for (const titleCandidate of titleCandidates) {
-      picked = pickBestMetadataMatch(items, titleCandidate, preferredMediaTypes, preferredSeason)
+      const picked = pickBestMetadataMatch(
+        items,
+        titleCandidate,
+        preferredMediaTypes,
+        preferredSeason,
+      )
       if (picked) {
-        break
+        return picked
       }
     }
   }
 
-  if (picked) {
-    return picked
-  }
-
+  const normalizedMatch = await metadataProvider.findByNormalizedTitle(detection.normalizedTitle)
   return normalizedMatch
+}
+
+export async function refreshAniListMetadata(detection: DetectionResult) {
+  return resolveAniListMetadata(detection)
 }
 
 export async function addFromExplorer(metadataId: string, listId: string) {

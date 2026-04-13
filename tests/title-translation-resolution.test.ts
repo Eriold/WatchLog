@@ -80,7 +80,7 @@ describe('resolveDetectionMetadata title translation', () => {
     const metadata = await resolveDetectionMetadata(createDetection())
 
     expect(getTranslatedTitleCandidates).toHaveBeenCalledWith('Secta de la montaña')
-    expect(requestedSearches).toContain('Mountain Sect')
+    expect(requestedSearches[0]).toBe('Mountain Sect')
     expect(metadata?.id).toBe('anilist:9001')
     expect(metadata?.title).toBe('Mountain Sect')
   })

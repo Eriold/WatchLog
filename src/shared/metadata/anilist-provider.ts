@@ -1,6 +1,6 @@
 import type { MetadataCard } from '../types'
-import { AniListClient } from './anilist-client'
-import { mapAniListMediaToMetadataCard } from './anilist-mappers'
+import { AniListClient, type AniListSearchOptions } from './anilist-client'
+import { mapAniListMediaToMetadataCard, type AniListMediaType } from './anilist-mappers'
 import { getMetadataNormalizedTitles, pickBestMetadataMatch } from './matching'
 import type { MetadataProvider } from './provider'
 
@@ -27,23 +27,47 @@ export class AniListMetadataProvider implements MetadataProvider {
       return []
     }
 
-    const [anime, manga] = await Promise.all([
-      this.client.searchMedia(trimmedQuery, 'ANIME'),
-      this.client.searchMedia(trimmedQuery, 'MANGA'),
-    ])
+    return this.searchByTypes(trimmedQuery, 'ANIME', 'MANGA')
+  }
+
+  async searchByType(
+    query: string | undefined,
+    type: AniListMediaType,
+    options: AniListSearchOptions = {},
+  ): Promise<MetadataCard[]> {
+    const trimmedQuery = query?.trim()
+    if (!trimmedQuery) {
+      return []
+    }
+
+    const media = await this.client.searchMedia(trimmedQuery, type, options)
+    return media.map((item) => mapAniListMediaToMetadataCard(item))
+  }
+
+  async searchByTypes(
+    query: string | undefined,
+    ...types: AniListMediaType[]
+  ): Promise<MetadataCard[]> {
+    const trimmedQuery = query?.trim()
+    if (!trimmedQuery) {
+      return []
+    }
 
     const seen = new Set<string>()
     const items: MetadataCard[] = []
 
-    for (const media of [...anime, ...manga]) {
-      const card = mapAniListMediaToMetadataCard(media)
-      const dedupeKey = `${card.mediaType}:${card.normalizedTitle}`
-      if (seen.has(dedupeKey)) {
-        continue
-      }
+    for (const type of types) {
+      const results = await this.searchByType(trimmedQuery, type)
 
-      seen.add(dedupeKey)
-      items.push(card)
+      for (const card of results) {
+        const dedupeKey = `${card.mediaType}:${card.normalizedTitle}`
+        if (seen.has(dedupeKey)) {
+          continue
+        }
+
+        seen.add(dedupeKey)
+        items.push(card)
+      }
     }
 
     return items
@@ -63,6 +87,26 @@ export class AniListMetadataProvider implements MetadataProvider {
     }
 
     return pickBestMetadataMatch(cards, normalizedTitle, ['anime', 'manga'])
+  }
+
+  async findByNormalizedTitleForType(
+    normalizedTitle: string,
+    type: AniListMediaType,
+    options: AniListSearchOptions = {},
+  ): Promise<MetadataCard | undefined> {
+    const query = normalizedTitle.trim()
+    if (!query) {
+      return undefined
+    }
+
+    const cards = await this.searchByType(query, type, options)
+    const direct = cards.find((item) => getMetadataNormalizedTitles(item).includes(normalizedTitle))
+
+    if (direct) {
+      return direct
+    }
+
+    return pickBestMetadataMatch(cards, normalizedTitle, [type === 'ANIME' ? 'anime' : 'manga'])
   }
 
   async getById(id: string): Promise<MetadataCard | undefined> {

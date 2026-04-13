@@ -14,24 +14,15 @@ export class MetadataResolver {
 
   async search(query: MetadataQuery): Promise<MetadataCard[]> {
     const sources = this.registry.select(query)
-    const results = await Promise.all(
-      sources.map(async (source) => {
-        const items = await source.search(query)
-        return items.map(
-          (item): MetadataCandidate => ({
-            sourceId: source.id,
-            item,
-            matchedBy: 'search',
-          }),
-        )
-      }),
-    )
-
     const dedupeMap = new Map<string, MetadataCard>()
-    for (const item of results.flat()) {
-      const dedupeKey = `${item.item.id}:${item.item.mediaType}:${item.item.normalizedTitle}`
-      if (!dedupeMap.has(dedupeKey)) {
-        dedupeMap.set(dedupeKey, item.item)
+
+    for (const source of sources) {
+      const items = await source.search(query)
+      for (const item of items) {
+        const dedupeKey = `${item.id}:${item.mediaType}:${item.normalizedTitle}`
+        if (!dedupeMap.has(dedupeKey)) {
+          dedupeMap.set(dedupeKey, item)
+        }
       }
     }
 
@@ -40,23 +31,20 @@ export class MetadataResolver {
 
   async findByNormalizedTitle(query: MetadataQuery): Promise<MetadataCard | undefined> {
     const sources = this.registry.select(query)
-    const matches = await Promise.all(
-      sources.map(async (source) => {
-        const item = await source.findByNormalizedTitle(query)
-        if (!item) {
-          return undefined
-        }
+    const candidates: MetadataCandidate[] = []
 
-        return {
-          sourceId: source.id,
-          item,
-          matchedBy: 'normalized-title',
-        } as MetadataCandidate
-      }),
-    )
-    const candidates: MetadataCandidate[] = matches.filter(
-      (item): item is MetadataCandidate => item !== undefined,
-    )
+    for (const source of sources) {
+      const item = await source.findByNormalizedTitle(query)
+      if (!item) {
+        continue
+      }
+
+      candidates.push({
+        sourceId: source.id,
+        item,
+        matchedBy: 'normalized-title',
+      })
+    }
 
     return this.mergePolicy.pickBest(candidates, query)
   }

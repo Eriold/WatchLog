@@ -5,6 +5,7 @@ import type { AniListMedia, AniListMediaType } from './anilist-mappers'
 const ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co'
 const SEARCH_TTL_MS = 1000 * 60 * 60 * 12
 const DETAIL_TTL_MS = 1000 * 60 * 60 * 24
+const ANILIST_CLIENT_LOG_PREFIX = '[WatchLog][AniListClient]'
 
 interface AniListGraphQLError {
   message?: string
@@ -32,6 +33,10 @@ interface CacheEntry<TValue> {
 }
 
 type CacheStore = Record<string, CacheEntry<unknown>>
+
+export interface AniListSearchOptions {
+  bypassCache?: boolean
+}
 
 function canUseChromeStorage(): boolean {
   return (
@@ -91,6 +96,27 @@ export class AniListClient {
     await storageSet(chrome.storage.local, STORAGE_KEYS.anilistCache, cacheStore)
   }
 
+  private async deleteCache(key: string): Promise<void> {
+    this.memoryCache.delete(key)
+
+    if (!canUseChromeStorage()) {
+      return
+    }
+
+    const cacheStore = await storageGet<CacheStore>(
+      chrome.storage.local,
+      STORAGE_KEYS.anilistCache,
+      {},
+    )
+
+    if (!(key in cacheStore)) {
+      return
+    }
+
+    delete cacheStore[key]
+    await storageSet(chrome.storage.local, STORAGE_KEYS.anilistCache, cacheStore)
+  }
+
   private async request<TData, TVariables extends Record<string, unknown>>(
     query: string,
     variables: TVariables,
@@ -130,17 +156,38 @@ export class AniListClient {
     return payload.data
   }
 
-  async searchMedia(search: string, type: AniListMediaType): Promise<AniListMedia[]> {
+  async searchMedia(
+    search: string,
+    type: AniListMediaType,
+    options: AniListSearchOptions = {},
+  ): Promise<AniListMedia[]> {
     const normalizedQuery = search.trim()
     if (!normalizedQuery) {
       return []
     }
 
     const cacheKey = `search:${type}:${normalizedQuery.toLowerCase()}`
-    const cached = await this.readCache<AniListMedia[]>(cacheKey)
-    if (cached) {
-      return cached
+    if (options.bypassCache) {
+      console.info(`${ANILIST_CLIENT_LOG_PREFIX} Search cache bypass`, {
+        search: normalizedQuery,
+        type,
+      })
+    } else {
+      const cached = await this.readCache<AniListMedia[]>(cacheKey)
+      if (cached) {
+        console.info(`${ANILIST_CLIENT_LOG_PREFIX} Search cache hit`, {
+          search: normalizedQuery,
+          type,
+          results: cached.length,
+        })
+        return cached
+      }
     }
+
+    console.info(`${ANILIST_CLIENT_LOG_PREFIX} Search network request`, {
+      search: normalizedQuery,
+      type,
+    })
 
     const query = `
       query SearchMedia($search: String, $type: MediaType, $page: Int, $perPage: Int) {
@@ -194,7 +241,18 @@ export class AniListClient {
     })
 
     const media = data.Page?.media?.filter(Boolean) ?? []
-    await this.writeCache(cacheKey, media, SEARCH_TTL_MS)
+    console.info(`${ANILIST_CLIENT_LOG_PREFIX} Search network result`, {
+      search: normalizedQuery,
+      type,
+      results: media.length,
+      ids: media.map((item) => item.id),
+    })
+
+    if (media.length > 0) {
+      await this.writeCache(cacheKey, media, SEARCH_TTL_MS)
+    } else {
+      await this.deleteCache(cacheKey)
+    }
 
     for (const item of media) {
       await this.writeCache(`detail:${item.id}`, item, DETAIL_TTL_MS)

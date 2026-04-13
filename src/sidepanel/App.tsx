@@ -9,6 +9,7 @@ import {
   removeEntry,
   removeList,
   resolveDetectionMetadata,
+  refreshAniListMetadata,
   saveDetection,
   updateList,
   updateEntry,
@@ -1038,10 +1039,20 @@ export function SidePanelApp() {
 
   async function handleRefreshEntryAniList(): Promise<void> {
     if (!selectedEntry || !selectedDraft || isEntryAniListRefreshing) {
+      console.warn('[WatchLog][AniListRefresh] Refresh ignored', {
+        hasSelectedEntry: Boolean(selectedEntry),
+        hasSelectedDraft: Boolean(selectedDraft),
+        isEntryAniListRefreshing,
+      })
       return
     }
 
     if (!['anime', 'manga', 'manhwa', 'manhua'].includes(selectedDraft.mediaType)) {
+      console.warn('[WatchLog][AniListRefresh] Refresh blocked by media type', {
+        catalogId: selectedEntry.catalog.id,
+        title: selectedEntry.catalog.title,
+        mediaType: selectedDraft.mediaType,
+      })
       setStatusMessageState({
         key: 'library.errorWithReason',
         params: {
@@ -1053,31 +1064,59 @@ export function SidePanelApp() {
       return
     }
 
+    const catalogId = selectedEntry.catalog.id
+    const draftSnapshot = {
+      mediaType: selectedDraft.mediaType,
+    }
+
+    console.info('[WatchLog][AniListRefresh] Button pressed', {
+      catalogId,
+      title: selectedEntry.catalog.title,
+      normalizedTitle: selectedEntry.catalog.normalizedTitle,
+      mediaType: draftSnapshot.mediaType,
+      currentAniListId: selectedEntry.catalog.externalIds.anilist ?? null,
+      currentMangaDexId: selectedEntry.catalog.externalIds.mangadex ?? null,
+    })
+
     setIsEntryAniListRefreshing(true)
     setStatusMessageState({ key: 'library.anilistRefreshRunning' })
 
     try {
       const detection = {
         ...buildDetectionForCatalogSync(selectedEntry),
-        mediaType: selectedDraft.mediaType,
+        mediaType: draftSnapshot.mediaType,
       }
-      const metadata = await resolveDetectionMetadata(detection)
+      console.info('[WatchLog][AniListRefresh] Detection payload', detection)
+      const metadata = await refreshAniListMetadata(detection)
 
       if (!metadata) {
+        console.warn('[WatchLog][AniListRefresh] No metadata found', {
+          catalogId,
+          title: selectedEntry.catalog.title,
+        })
         setStatusMessageState({ key: 'library.anilistRefreshNoMatch' })
         return
       }
 
-      const nextProgress = buildSelectedDraftProgress()
+      console.info('[WatchLog][AniListRefresh] Metadata received', {
+        catalogId,
+        title: selectedEntry.catalog.title,
+        metadataId: metadata.id,
+        metadataTitle: metadata.title,
+        metadataSourceUrl: metadata.sourceUrl ?? null,
+      })
+
       const response = await updateEntry({
-        catalogId: selectedEntry.catalog.id,
-        title: selectedDraft.title,
-        mediaType: selectedDraft.mediaType,
-        listId: selectedDraft.listId,
-        favorite: selectedDraft.favorite,
-        manualNotes: selectedDraft.notes,
-        progress: nextProgress ?? undefined,
+        catalogId,
         metadataRefresh: metadata,
+      })
+
+      console.info('[WatchLog][AniListRefresh] Entry updated', {
+        catalogId,
+        persistedCatalogId: response.entry?.catalog.id ?? null,
+        persistedTitle: response.entry?.catalog.title ?? null,
+        persistedAniListId: response.entry?.catalog.externalIds.anilist ?? null,
+        persistedMangaDexId: response.entry?.catalog.externalIds.mangadex ?? null,
       })
 
       setSnapshot(response.snapshot)
@@ -1088,9 +1127,16 @@ export function SidePanelApp() {
           [persistedEntry.catalog.id]: createEntryDraft(persistedEntry),
         }))
       }
-      setSelectedEntryMetadata(metadata)
+      if (selectedCatalogId === catalogId) {
+        setSelectedEntryMetadata(metadata)
+      }
       setStatusMessageState({ key: 'library.anilistRefreshDone' })
     } catch (error) {
+      console.error('[WatchLog][AniListRefresh] Refresh failed', {
+        catalogId,
+        title: selectedEntry.catalog.title,
+        error,
+      })
       setStatusMessageState({
         key: 'library.errorWithReason',
         params: {
