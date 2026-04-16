@@ -1,7 +1,7 @@
 {
   "name": "watchlog",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "packageManager": "pnpm@10.6.3",
   "scripts": {
