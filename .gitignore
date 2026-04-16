@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-firefox
+release
 dist-ssr
 *.local
 
@@ -27,3 +28,5 @@ dist-ssr
 # Local project memory and design intake
 _agent/
 prototype_ui/
+.agents/
+skills-lock.json

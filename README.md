@@ -76,6 +76,8 @@ pnpm dev
 pnpm build
 pnpm build:chrome
 pnpm build:firefox
+pnpm build:release
+pnpm release:dry-run
 pnpm test
 pnpm lint
 pnpm deps:policy
@@ -85,6 +87,8 @@ Notes:
 - `pnpm build` defaults to the Chrome build target.
 - `pnpm build:chrome` explicitly builds for Chrome/Chromium.
 - `pnpm build:firefox` builds the Firefox-compatible output.
+- `pnpm build:release` builds both targets and packages `release/watchlog-chrome.zip` plus `release/watchlog-firefox.zip`.
+- `pnpm release:dry-run` shows what `semantic-release` would publish without creating a tag or release.
 
 ## Build Outputs
 
@@ -92,6 +96,11 @@ After building, the generated folders are:
 
 - Chrome/Chromium: `dist/`
 - Firefox: `dist-firefox/`
+
+Release packaging also generates:
+
+- Chrome/Chromium bundle: `release/watchlog-chrome.zip`
+- Firefox bundle: `release/watchlog-firefox.zip`
 
 ## How To Run In Chrome Or Chromium
 
@@ -208,6 +217,28 @@ Emergency bypass exists only through:
 ```bash
 WATCHLOG_SKIP_DEP_POLICY=1
 ```
+
+## Release Automation
+
+WatchLog now includes `semantic-release` for automated GitHub releases.
+
+What it does on `main`:
+- analyzes commit messages using Conventional Commits
+- calculates the next version
+- updates `package.json` and the extension manifest version
+- writes `CHANGELOG.md`
+- builds Chrome and Firefox bundles
+- publishes a GitHub Release with both ZIP artifacts attached
+
+Current workflow file:
+- `.github/workflows/release.yml`
+
+Important requirements:
+- commits merged into `main` must follow Conventional Commits such as `feat: ...`, `fix: ...`, `perf: ...`
+- prerelease beta publishing happens from the `beta` branch and produces semantic versions such as `1.0.0-beta.1`
+- because browser extensions require numeric manifest versions, WatchLog maps prereleases to a numeric `manifest.version` and keeps the semantic prerelease string in `manifest.version_name`
+- GitHub Actions must have permission to write repository contents
+- if you want release-created workflows to trigger other workflows, use a custom token instead of the default `GITHUB_TOKEN`
 
 ## Troubleshooting
 

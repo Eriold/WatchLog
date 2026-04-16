@@ -1,8 +1,38 @@
 import { defineManifest } from '@crxjs/vite-plugin'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export type BuildTarget = 'chrome' | 'firefox'
 
-const version = '0.1.0'
+const packageJsonPath = resolve(dirname(fileURLToPath(import.meta.url)), 'package.json')
+const { version: packageVersion } = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version: string }
+const version = process.env.WATCHLOG_RELEASE_VERSION ?? packageVersion
+const MAX_EXTENSION_PRERELEASE = 65534
+
+function toExtensionVersion(packageVersion: string) {
+  const match = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-[0-9A-Za-z-]+(?:\.(?<prerelease>\d+))?)?$/.exec(
+    packageVersion,
+  )
+
+  if (!match?.groups) {
+    throw new Error(`Unsupported package version for extension manifest: ${packageVersion}`)
+  }
+
+  const { major, minor, patch, prerelease } = match.groups
+  if (prerelease !== undefined) {
+    const prereleaseNumber = Number(prerelease)
+    if (!Number.isInteger(prereleaseNumber) || prereleaseNumber < 0 || prereleaseNumber > MAX_EXTENSION_PRERELEASE) {
+      throw new Error(`Unsupported prerelease number for extension manifest: ${packageVersion}`)
+    }
+
+    return `${major}.${minor}.${patch}.${prereleaseNumber}`
+  }
+
+  return `${major}.${minor}.${patch}.${MAX_EXTENSION_PRERELEASE}`
+}
+
+const extensionVersion = toExtensionVersion(version)
 
 function createSharedManifest(target: BuildTarget) {
   const background =
@@ -21,7 +51,8 @@ function createSharedManifest(target: BuildTarget) {
     name: 'WatchLog',
     description:
       'Track what you are watching or reading across streaming sites and the web without central tracking.',
-    version,
+    version: extensionVersion,
+    version_name: version,
     icons: {
       16: 'icons/favicon-16x16.png',
       32: 'icons/favicon-32x32.png',
